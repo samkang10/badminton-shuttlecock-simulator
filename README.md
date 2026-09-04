@@ -101,9 +101,9 @@ print(S.physics_verification_suite(S.ParameterDatabase()))
 
 ## License
 
-Not yet decided. Until a license file is added, treat this as
-source-available for reading and verification, not for redistribution or reuse
-— contact the repository owner for permission if you want to build on it.
+MIT — see [`LICENSE`](LICENSE). You may use, modify and redistribute this,
+including commercially, as long as the copyright notice travels with it. If you
+use it in published work, a citation is appreciated but not legally required.
 
 ## Citing this repository
 
