@@ -10,7 +10,7 @@ import re
                                                                               
                                                                             
 APP_LANGUAGE = "ko"                                                           
-APP_VERSION = "2.55"                                                          
+APP_VERSION = "2.56"                                                          
 
 logging.basicConfig(
     level=logging.INFO,
@@ -968,6 +968,23 @@ STRINGS = {
         "param_value": "값",
         "param_unit": "단위",
         "note": "현재 단계는 3D 확장을 위한 기반 구조입니다. 두 카메라의 파라미터를 입력하고 각각 추적한 뒤 재구성을 실행하세요. 기존 2D 분석 결과에는 영향을 주지 않습니다.",
+    },
+
+    "guard": {
+        "empty_input": ("입력칸이 비어 있어 실행하지 않았습니다. 프레임 번호나 설정값을 "
+                        "채운 뒤 다시 눌러 주세요."),
+        "no_object": ("대상 물체가 선택되어 있지 않습니다. '활성 물체'를 고른 뒤 다시 눌러 "
+                      "주세요."),
+        "no_file": "필요한 파일이 아직 만들어지지 않았습니다. 앞 단계를 먼저 실행하세요.",
+        "no_data": ("사용할 데이터가 없습니다. 영상을 불러오고 추적을 실행한 뒤 다시 눌러 "
+                    "주세요."),
+        "generic": ("이 동작을 지금은 실행할 수 없어 화면을 그대로 두었습니다 ({error}). "
+                    "앞 단계를 먼저 끝냈는지 확인하세요 — 자세한 내용은 로그에 있습니다."),
+        "need_video": "① 먼저 실험 영상을 불러오세요.",
+        "need_object": "④ 먼저 영상에서 추적할 물체를 지정하세요.",
+        "need_tracking": "⑤ 먼저 추적을 실행하세요.",
+        "need_physics": "⑦ 먼저 물리량 계산을 실행하세요.",
+        "ready": "",
     },
 
     "shuttlecock": {
@@ -10819,6 +10836,28 @@ class Controller:
         obj = self.state.objects.get(self.state.active_obj_id)
         return obj is not None and not obj.physics_data.empty
 
+    def build_action_availability(self) -> Dict[str, bool]:
+        """지금 이 순간 어떤 동작이 실제로 가능한지 한곳에서 판단한다.
+
+        Tracker 처럼, 아직 할 수 없는 동작은 눌리지 않게 두는 편이 낫다. 눌러 봐야 아무 일도
+        일어나지 않거나 오류만 나는 버튼은 사용자에게 '무엇을 먼저 해야 하는지'를 알려주지
+        못한다. 판단 기준을 여기 한곳에 모아 두면 버튼마다 조건이 어긋나는 일이 없다.
+        """
+        video_ok = bool(self.state.video_path)
+        obj = self.state.objects.get(self.state.active_obj_id)
+        marked_ok = bool(video_ok and obj is not None and not obj.trajectory.empty)
+        track_ok = self.is_tracking_done()
+        history_ok = bool(getattr(self.state.history, "undo_stack", None))
+        redo_ok = bool(getattr(self.state.history, "redo_stack", None))
+        return {
+            "video": video_ok,
+            "marked": marked_ok,
+            "tracking": track_ok,
+            "physics": self.is_physics_done(),
+            "undo": history_ok,
+            "redo": redo_ok,
+        }
+
     def build_progress_status(self) -> str:
         P = get_strings()["progress"]
         video_ok = bool(self.state.video_path)
@@ -13525,39 +13564,55 @@ class Controller:
         status_col = df['tracking_status'].astype(str) if 'tracking_status' in df.columns \
             else pd.Series("", index=df.index)
 
-        rows = []
-        for i in df.index:
-            reasons = []
-            if not np.isfinite(x.get(i, np.nan)) or not np.isfinite(y.get(i, np.nan)):
-                reasons.append(CK["reason_missing"])
-            else:
-                if np.isfinite(conf.get(i, np.nan)) and conf.get(i) < threshold and not bool(keyframe.get(i, False)):
-                    reasons.append(CK["reason_low_conf"])
-                if float(jump.get(i, 0.0)) > 6.0:
-                    reasons.append(CK["reason_jump"])
-                if abs(float(vel_z.get(i, 0.0))) > 6.0:
-                    reasons.append(CK["reason_velocity"])
-                if abs(float(acc_z.get(i, 0.0))) > 8.0:
-                    reasons.append(CK["reason_accel"])
-                _ar = float(area_ratio.get(i, 1.0))
-                if np.isfinite(_ar) and (_ar > 2.5 or _ar < 0.4):
-                    reasons.append(CK["reason_size"])
-                if str(source_col.get(i, "")) == VideoProcessor.SOURCE_PREDICTED:
-                    reasons.append(CK["reason_predicted"])
-                if str(status_col.get(i, "")) == VideoProcessor.STATUS_LOST:
-                    reasons.append(CK["reason_status"])
-            if reasons:
-                rows.append({
-                    CK["col_frame"]: int(frames.get(i, -1)),
-                    CK["col_conf"]: float(conf.get(i, np.nan)),
-                    CK["col_x"]: float(x.get(i, np.nan)),
-                    CK["col_y"]: float(y.get(i, np.nan)),
                                                                                      
-                    "source": str(source_col.get(i, "")) or "-",
-                    "status": str(status_col.get(i, "")) or "-",
-                    CK["col_reason"]: " / ".join(reasons),
-                })
-        return pd.DataFrame(rows)
+                                                                                     
+                                                                                    
+        xa = x.to_numpy(dtype=float)
+        ya = y.to_numpy(dtype=float)
+        confa = conf.to_numpy(dtype=float)
+        keya = _as_bool(keyframe).to_numpy()
+        missing = ~np.isfinite(xa) | ~np.isfinite(ya)
+        present = ~missing
+        src = source_col.to_numpy(dtype=object)
+        sts = status_col.to_numpy(dtype=object)
+        ar = area_ratio.to_numpy(dtype=float)
+
+        checks = [
+            (missing, CK["reason_missing"]),
+            (present & np.isfinite(confa) & (confa < threshold) & ~keya, CK["reason_low_conf"]),
+            (present & (jump.to_numpy(dtype=float) > 6.0), CK["reason_jump"]),
+            (present & (np.abs(vel_z.to_numpy(dtype=float)) > 6.0), CK["reason_velocity"]),
+            (present & (np.abs(acc_z.to_numpy(dtype=float)) > 8.0), CK["reason_accel"]),
+            (present & np.isfinite(ar) & ((ar > 2.5) | (ar < 0.4)), CK["reason_size"]),
+            (present & (src == VideoProcessor.SOURCE_PREDICTED), CK["reason_predicted"]),
+            (present & (sts == VideoProcessor.STATUS_LOST), CK["reason_status"]),
+        ]
+        flagged = np.zeros(len(df), dtype=bool)
+        for mask, _label in checks:
+            flagged |= mask
+        if not flagged.any():
+            return pd.DataFrame()
+                                                                                     
+                                                                                
+        reasons = np.array([""] * len(df), dtype=object)
+        for mask, label in checks:
+            sel = mask & flagged
+            if not sel.any():
+                continue
+            reasons[sel] = np.where(reasons[sel] == "", label, reasons[sel] + " / " + label)
+
+        idx = np.flatnonzero(flagged)
+        return pd.DataFrame({
+            CK["col_frame"]: np.nan_to_num(frames.to_numpy(dtype=float)[idx],
+                                           nan=-1.0).astype(int),
+            CK["col_conf"]: confa[idx],
+            CK["col_x"]: xa[idx],
+            CK["col_y"]: ya[idx],
+                                                                                     
+            "source": np.where(src[idx] == "", "-", src[idx]),
+            "status": np.where(sts[idx] == "", "-", sts[idx]),
+            CK["col_reason"]: reasons[idx],
+        })
 
     def find_suspicious_frame(self, obj_id: str, current_frame: int, direction: int, conf_threshold: float = 0.5) -> Optional[int]:
         table = self.get_suspicious_frames(obj_id, conf_threshold)
@@ -17320,6 +17375,7 @@ class Controller:
         return obj.trajectory, phys_df, ai_summary
 
                                                                               
+import functools
 import os
 import tempfile
 import time
@@ -17346,6 +17402,198 @@ def _patch_gradio_compat() -> None:
 
 
 _patch_gradio_compat()
+
+
+                                                                              
+                                                                              
+                                                                              
+
+
+def _component_fallback(component: Any) -> Any:
+    """입력칸이 비었을 때 대신 쓸 값(그 칸의 초기값)을 돌려준다.
+
+    Gradio 에서 숫자칸을 지우면 값이 None 으로 들어온다. 핸들러는 대부분 int()/float()
+    로 바로 바꾸므로 그 자리에서 TypeError 가 난다. 사용자가 보기에는 '입력칸을 비웠더니
+    버튼이 죽는' 현상이다. 없는 값을 지어내지 않고, 그 칸이 원래 갖고 있던 초기값으로
+    되돌리는 것이 가장 덜 놀라운 동작이다.
+    """
+    try:
+        value = getattr(component, "value", None)
+    except Exception:
+        value = None
+    if value is not None:
+        return value
+                                                                              
+    try:
+        choices = getattr(component, "choices", None)
+    except Exception:
+        choices = None
+    if choices:
+        first = choices[0]
+                                                                            
+        if isinstance(first, (tuple, list)) and len(first) >= 2:
+            return first[1]
+        return first
+                                                                              
+    for attr, kind in (("minimum", float), ("value", float)):
+        try:
+            raw = getattr(component, attr, None)
+        except Exception:
+            raw = None
+        if raw is not None:
+            try:
+                return kind(raw)
+            except (TypeError, ValueError):
+                pass
+    name = type(component).__name__
+    if name in ("Number", "Slider"):
+        return 0
+    if name in ("Checkbox",):
+        return False
+    if name in ("CheckboxGroup",):
+        return []
+    if name in ("Textbox", "Dropdown", "Radio"):
+        return ""
+    return None
+
+
+                                                                              
+                                                                              
+_NEEDS_FALLBACK = ("Number", "Slider", "Dropdown", "Radio", "Checkbox", "CheckboxGroup")
+
+
+def _no_op_outputs(count: int):
+    """출력 개수에 맞는 '아무것도 바꾸지 않음' 값을 만든다."""
+    skip = getattr(gr, "skip", None)
+    try:
+        one = skip() if callable(skip) else gr.update()
+    except Exception:
+        one = gr.update()
+    if count <= 0:
+        return None
+    if count == 1:
+        return one
+    return tuple(one for _ in range(count))
+
+
+def _handler_hint(exc: BaseException) -> str:
+    """왜 안 되는지 사용자 말로 설명한다."""
+    HINT = get_strings()["guard"]
+    text = str(exc)
+    if isinstance(exc, KeyError):
+        return HINT["no_object"]
+    if isinstance(exc, (TypeError, ValueError)) and "NoneType" in text:
+        return HINT["empty_input"]
+    if isinstance(exc, FileNotFoundError):
+        return HINT["no_file"]
+    if isinstance(exc, IndexError):
+        return HINT["no_data"]
+    return HINT["generic"].format(error=f"{type(exc).__name__}: {text[:160]}")
+
+
+def _wrap_event_handler(fn, inputs, n_outputs: int):
+    """이벤트 핸들러 하나를 감싸, 어떤 상황에서도 앱이 멈추지 않게 한다.
+
+    두 가지를 한다.
+
+    1) 비어 있는 입력칸(None)을 그 칸의 초기값으로 되돌린다 — int(None) 류의 오류를
+       핸들러에 닿기 전에 없앤다.
+    2) 그래도 예외가 나면 화면을 그대로 두고(출력 갱신 없음) 왜 안 되는지 토스트로
+       알린다. 전체 트레이스백은 로그에 남으므로 원인 추적은 그대로 가능하다.
+
+    핸들러 하나하나를 고치는 대신 등록 지점에서 한 번에 감싸므로, 나중에 추가되는
+    핸들러도 자동으로 같은 보호를 받는다.
+    """
+    fallbacks = []
+    allowed = []
+    for comp in (inputs or []):
+        if type(comp).__name__ in _NEEDS_FALLBACK:
+            fallbacks.append(_component_fallback(comp))
+        else:
+            fallbacks.append(None)
+                                                                                     
+                                                                                     
+        choices = None
+        if type(comp).__name__ in ("Dropdown", "Radio") and not getattr(comp, "allow_custom_value", False):
+            try:
+                raw = getattr(comp, "choices", None) or []
+                choices = {c[1] if isinstance(c, (tuple, list)) and len(c) >= 2 else c
+                           for c in raw}
+            except Exception:
+                choices = None
+        allowed.append(choices)
+    n_in = len(fallbacks)
+
+    def _is_empty(value: Any) -> bool:
+        """비어 있는 입력인가. None 뿐 아니라 NaN 도 여기 해당한다.
+
+        숫자칸을 지웠을 때 Gradio 버전에 따라 None 이 오기도 하고 NaN 이 오기도 한다.
+        둘 다 '값이 없다'는 뜻인데, int(nan) 은 None 과는 다른 예외를 내므로 함께 다룬다.
+        """
+        if value is None:
+            return True
+        if isinstance(value, float):
+            try:
+                return not np.isfinite(value)
+            except Exception:
+                return False
+        return False
+
+    @functools.wraps(fn)
+    def _guarded(*args, **kwargs):
+        if args:
+            fixed = list(args)
+            for i in range(min(n_in, len(fixed))):
+                if fallbacks[i] is not None and _is_empty(fixed[i]):
+                    fixed[i] = fallbacks[i]
+                                                                                     
+                                                                                     
+                elif (allowed[i] and fixed[i] not in allowed[i]
+                        and fallbacks[i] is not None):
+                    fixed[i] = fallbacks[i]
+            args = tuple(fixed)
+        try:
+            return fn(*args, **kwargs)
+        except Exception as exc:
+            logger.exception(f"[{getattr(fn, '__name__', 'handler')}] 처리 중 오류 — "
+                             f"화면을 그대로 두고 계속합니다.")
+            try:
+                gr.Warning(_handler_hint(exc))
+            except Exception:
+                pass
+            return _no_op_outputs(n_outputs)
+
+    _guarded._aps_guarded = True                                
+    return _guarded
+
+
+def _harden_event_handlers(demo) -> int:
+    """앱에 등록된 모든 이벤트 핸들러에 보호막을 씌운다.
+
+    Gradio 는 Blocks 안에 등록된 이벤트를 demo.fns 로 갖고 있다(버전에 따라 list 또는
+    dict). 여기서 한 번에 감싸면 UI 정의를 건드리지 않고 전체를 보호할 수 있다.
+    """
+    try:
+        raw = getattr(demo, "fns", None)
+        if raw is None:
+            return 0
+        items = list(raw.values()) if isinstance(raw, dict) else list(raw)
+    except Exception as exc:
+        logger.warning(f"이벤트 핸들러 보호막 적용을 건너뜁니다: {exc}")
+        return 0
+    wrapped = 0
+    for block_fn in items:
+        try:
+            fn = getattr(block_fn, "fn", None)
+            if fn is None or getattr(fn, "_aps_guarded", False):
+                continue
+            block_fn.fn = _wrap_event_handler(fn, getattr(block_fn, "inputs", None),
+                                              len(getattr(block_fn, "outputs", None) or []))
+            wrapped += 1
+        except Exception:
+                                                                              
+            continue
+    return wrapped
 
 
 def _warmup_video_backend() -> None:
@@ -17763,10 +18011,10 @@ def build_gui():
                                                          minimum=0.0, step=0.0001)
                                     obj_mass_unit = gr.Dropdown(["kg", "g", "mg"], value="kg", label=WT["object_mass_unit"])
                                 gr.Markdown(WT["object_mass_desc"], elem_id="aps_hint")
-                                btn_object_mode = gr.Button(ST["btn_object_mode"], variant="primary", size="sm")
+                                btn_object_mode = gr.Button(ST["btn_object_mode"], variant="primary", size="sm", interactive=False)
                                 gr.Markdown(ST["btn_object_mode_desc"], elem_id="aps_hint")
                             with gr.Accordion(TM["two_point_group"], open=True):
-                                btn_cork_mode = gr.Button(ST["btn_cork_mode"], variant="primary", size="sm")
+                                btn_cork_mode = gr.Button(ST["btn_cork_mode"], variant="primary", size="sm", interactive=False)
                                 gr.Markdown(ST["btn_cork_mode_desc"], elem_id="aps_hint")
                                 with gr.Row():
                                     btn_clear_tracking = gr.Button(RST["tracking_button"], size="sm")
@@ -17791,7 +18039,7 @@ def build_gui():
                                 btn_track = gr.Button(WT["start_button"], variant="primary", interactive=False)
                                 gr.Markdown(ST["desc_track"], elem_id="aps_hint")
                                 btn_resume = gr.Button(CK["resume_button"], variant="primary", size="sm",
-                                                       elem_id="aps_resume")
+                                                       elem_id="aps_resume", interactive=False)
                                 gr.Markdown(CK["resume_hotkey_desc"], elem_id="aps_hint")
                                 gr.Markdown(CK["resume_desc"], elem_id="aps_hint")
                                 lbl_status = gr.Textbox(label=WT["status_box"], interactive=False, lines=1, max_lines=2)
@@ -17916,7 +18164,7 @@ def build_gui():
                                                            label=WT["cusp_ratio"])
                                 gr.Markdown(WT["cusp_desc"], elem_id="aps_hint")
                                 with gr.Row():
-                                    btn_bidir = gr.Button(WT["bidir_button"], size="sm")
+                                    btn_bidir = gr.Button(WT["bidir_button"], size="sm", interactive=False)
                                     bidir_tol = gr.Number(value=5.0, label=WT["bidir_tolerance"])
                                 bidir_status = gr.Markdown("", elem_id="aps_hint")
                                 bidir_table = gr.Dataframe(label=WT["bidir_table"], max_height=220)
@@ -17929,29 +18177,29 @@ def build_gui():
                         with gr.Column():
                             with gr.Accordion(ST["step6"], open=True):
                                 gr.Markdown(ST["hint_step6"], elem_id="aps_hint")
-                                btn_point_mode = gr.Button(ST["btn_point_mode"], variant="primary", size="sm")
+                                btn_point_mode = gr.Button(ST["btn_point_mode"], variant="primary", size="sm", interactive=False)
                                 gr.Markdown(ST["btn_point_mode_desc"], elem_id="aps_hint")
                                 with gr.Accordion(CK["header"], open=True):
                                     check_conf = gr.Slider(minimum=0.0, maximum=1.0, step=0.05, value=0.5,
                                                            label=CK["conf_threshold"])
-                                    btn_check_scan = gr.Button(CK["scan_button"], variant="primary", size="sm")
+                                    btn_check_scan = gr.Button(CK["scan_button"], variant="primary", size="sm", interactive=False)
                                     gr.Markdown(CK["scan_desc"], elem_id="aps_hint")
                                     check_status = gr.Markdown("", elem_id="aps_hint")
                                     with gr.Row():
-                                        btn_check_prev = gr.Button(CK["prev_button"], size="sm")
-                                        btn_check_next = gr.Button(CK["next_button"], size="sm")
+                                        btn_check_prev = gr.Button(CK["prev_button"], size="sm", interactive=False)
+                                        btn_check_next = gr.Button(CK["next_button"], size="sm", interactive=False)
                                     gr.Markdown(CK["nav_desc"], elem_id="aps_hint")
-                                    btn_retrack = gr.Button(CK["retrack_button"], variant="primary", size="sm")
+                                    btn_retrack = gr.Button(CK["retrack_button"], variant="primary", size="sm", interactive=False)
                                     gr.Markdown(CK["retrack_desc"], elem_id="aps_hint")
                                                                                      
                                     with gr.Row():
-                                        btn_local_retrack = gr.Button(CK["local_retrack_button"], size="sm")
+                                        btn_local_retrack = gr.Button(CK["local_retrack_button"], size="sm", interactive=False)
                                         local_retrack_window = gr.Slider(3, 60, value=15, step=1,
                                                                          label=CK["local_retrack_window"])
                                     gr.Markdown(CK["local_retrack_desc"], elem_id="aps_hint")
                                     with gr.Row():
-                                        btn_delete_point = gr.Button(CK["delete_button"], size="sm")
-                                        btn_delete_bulk = gr.Button(CK["bulk_delete_button"], size="sm")
+                                        btn_delete_point = gr.Button(CK["delete_button"], size="sm", interactive=False)
+                                        btn_delete_bulk = gr.Button(CK["bulk_delete_button"], size="sm", interactive=False)
                                     gr.Markdown(CK["delete_desc"] + " " + CK["bulk_delete_desc"], elem_id="aps_hint")
                                     check_table = gr.Dataframe(label=CK["table"], max_height=220)
                                                                                      
@@ -17961,21 +18209,21 @@ def build_gui():
                                     ref_file = gr.File(label=VS["ref_upload"], file_types=[".csv", ".txt"])
                                     ref_status = gr.Markdown("", elem_id="aps_hint")
                                     with gr.Row():
-                                        btn_validate_track = gr.Button(VS["run_button"], variant="primary", size="sm")
+                                        btn_validate_track = gr.Button(VS["run_button"], variant="primary", size="sm", interactive=False)
                                         btn_clear_ref = gr.Button(VS["clear_button"], size="sm")
                                     gr.Markdown(VS["run_desc"], elem_id="aps_hint")
                                     track_metrics_table = gr.Dataframe(label=VS["metrics_table"], max_height=260)
                                     track_physics_table = gr.Dataframe(label=VS["physics_table"], max_height=260)
                                     track_verdict = gr.Markdown("", elem_id="aps_hint")
-                                    btn_export_research = gr.Button(VS["export_button"], size="sm")
+                                    btn_export_research = gr.Button(VS["export_button"], size="sm", interactive=False)
                                     research_file = gr.File(label=VS["export_button"], interactive=False)
                                     gr.Markdown(VS["export_desc"], elem_id="aps_hint")
                                 repair_method = gr.Dropdown(WT["repair_choices"], value="Spline", label=WT["repair_algo_label"])
-                                btn_repair = gr.Button(WT["repair_button"], size="sm")
+                                btn_repair = gr.Button(WT["repair_button"], size="sm", interactive=False)
                                 gr.Markdown(ST["desc_repair"], elem_id="aps_hint")
                                 with gr.Row():
-                                    btn_undo = gr.Button(WT["undo_button"], size="sm")
-                                    btn_redo = gr.Button(WT["redo_button"], size="sm")
+                                    btn_undo = gr.Button(WT["undo_button"], size="sm", interactive=False)
+                                    btn_redo = gr.Button(WT["redo_button"], size="sm", interactive=False)
                                 gr.Markdown(ST["desc_undo"] + " / " + ST["desc_redo"], elem_id="aps_hint")
 
                     with gr.Accordion(TM["preview_group"], open=False):
@@ -18937,9 +19185,17 @@ def build_gui():
             return ctrl.export_data_files(obj_id)
 
         def on_export_video(obj_id):
+                                                                                     
+                                                                                
+            if not ctrl.state.video_path:
+                gr.Warning(get_strings()["guard"]["need_video"])
+                return None
             out_p = os.path.join(tempfile.mkdtemp(), "물리량_오버레이_영상.mp4")
-            if ctrl.state.video_path:
-                ctrl.video_processor.export_annotated_video(ctrl.state.video_path, out_p, ctrl.state.objects, ctrl.state.fps)
+            ctrl.video_processor.export_annotated_video(
+                ctrl.state.video_path, out_p, ctrl.state.objects, ctrl.state.fps)
+            if not (os.path.exists(out_p) and os.path.getsize(out_p) > 0):
+                gr.Warning(get_strings()["messages"]["no_data_to_export"])
+                return None
             return out_p
 
         def on_save_project():
@@ -18955,6 +19211,11 @@ def build_gui():
 
         def on_state_refresh(obj_id):
             phys_ok = ctrl.is_physics_done()
+                                                                                     
+                                                                                     
+            can = ctrl.build_action_availability()
+            _video, _marked = can["video"], can["marked"]
+            _track = can["tracking"]
             return (ctrl.build_progress_status(),
                     gr.Button(interactive=ctrl.is_calibration_done()),
                     gr.Button(interactive=ctrl.is_tracking_done()),
@@ -18967,7 +19228,27 @@ def build_gui():
                     gr.Button(interactive=phys_ok),
                     _ui_table(ctrl.get_physics_subset(obj_id, "attitude")),
                     _ui_table(ctrl.get_physics_subset(obj_id, "dynamics")),
-                    ctrl.build_coordinate_status(obj_id))
+                    ctrl.build_coordinate_status(obj_id),
+                                                                                
+                    gr.Button(interactive=_video),                     
+                    gr.Button(interactive=_video),                   
+                    gr.Button(interactive=_video),                    
+                    gr.Button(interactive=_marked),                 
+                                                                                  
+                    gr.Button(interactive=_track),                   
+                    gr.Button(interactive=_marked),                    
+                    gr.Button(interactive=_track),                  
+                    gr.Button(interactive=_track),                  
+                    gr.Button(interactive=_track),                   
+                    gr.Button(interactive=_track),                
+                    gr.Button(interactive=_track),                     
+                    gr.Button(interactive=_track),                
+                    gr.Button(interactive=_track),                     
+                    gr.Button(interactive=_track),               
+                    gr.Button(interactive=_track),              
+                                                                             
+                    gr.Button(interactive=can["undo"]),
+                    gr.Button(interactive=can["redo"]))
 
         def on_coord_reset(obj_id, frame_idx):
             traj_df, phys_df, ai_sum = ctrl.reset_coordinate_system(obj_id)
@@ -19383,7 +19664,15 @@ def build_gui():
         _refresh_outputs = [progress_box, btn_coord_mode, btn_phys, btn_graph, summary_cards,
                             btn_research, btn_export_report, btn_export_graphs, btn_graph_export,
                             btn_save_trial,
-                            df_phys_attitude, df_phys_dynamics, coord_status]
+                            df_phys_attitude, df_phys_dynamics, coord_status,
+                                                                                     
+                                                                                     
+                            btn_object_mode, btn_cork_mode, btn_point_mode, btn_check_scan,
+                            btn_resume, btn_retrack, btn_local_retrack,
+                            btn_check_prev, btn_check_next,
+                            btn_delete_point, btn_delete_bulk, btn_repair, btn_bidir,
+                            btn_validate_track, btn_export_research,
+                            btn_undo, btn_redo]
         _graph_outputs = [graph_status, plot_position, plot_velocity, plot_acceleration,
                           plot_position_x, plot_position_y, plot_velocity_x, plot_velocity_y, plot_velocity_total,
                           plot_acceleration_x, plot_acceleration_y, plot_acceleration_total,
@@ -19824,6 +20113,13 @@ def build_gui():
             _queue_kwargs["api_open"] = False
     except Exception:
         pass
+                                                                                     
+                                                                                     
+                                                                                     
+    _guarded = _harden_event_handlers(app)
+    if _guarded:
+        logger.info(f"이벤트 핸들러 {_guarded}개에 보호막을 적용했습니다 — 아무것도 불러오지 "
+                    f"않은 상태에서 버튼을 눌러도 앱이 멈추지 않고, 왜 안 되는지 안내합니다.")
     try:
         return app.queue(**_queue_kwargs)
     except TypeError:

@@ -137,8 +137,17 @@ choice:
   — measured errors, and the answer to "can this be used as research data?"
 
 ```bash
-python3 tools/test_shuttlecock_tracking.py --verbose
+python3 tools/test_shuttlecock_tracking.py --verbose   # tracking accuracy
+python3 tools/test_ui_robustness.py                    # every button, in every empty state
 ```
+
+The second one exists because the most common failure in a research tool is not
+the tracker — it is pressing a button in the wrong order. It drives all 199
+registered event handlers with the inputs a real user can produce (fresh app,
+cleared number fields, blank/NaN values, nonexistent paths, and five partial
+workflow states) and checks that none of them stops the app. Actions that cannot
+work yet are disabled rather than left pressable, the way Tracker gates its
+workflow.
 
 ## Scope and limitations
 
