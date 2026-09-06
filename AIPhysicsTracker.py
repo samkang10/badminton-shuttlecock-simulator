@@ -10,7 +10,7 @@ import re
                                                                               
                                                                             
 APP_LANGUAGE = "ko"                                                           
-APP_VERSION = "2.54"                                                          
+APP_VERSION = "2.55"                                                          
 
 logging.basicConfig(
     level=logging.INFO,
@@ -970,6 +970,98 @@ STRINGS = {
         "note": "현재 단계는 3D 확장을 위한 기반 구조입니다. 두 카메라의 파라미터를 입력하고 각각 추적한 뒤 재구성을 실행하세요. 기존 2D 분석 결과에는 영향을 주지 않습니다.",
     },
 
+    "shuttlecock": {
+        "group": "셔틀콕 전용 설정 (Profile = Shuttlecock 일 때 적용)",
+        "group_desc": ("이 묶음은 Profile 을 Shuttlecock 으로 두었을 때만 동작합니다. "
+                       "다른 물체를 추적할 때는 아무 영향이 없습니다."),
+        "damage_label": "셔틀콕 손상 조건",
+        "damage_desc": ("실험에 쓰는 셔틀콕의 상태를 고르면 그 조건을 추적의 사전 정보로 씁니다. "
+                        "깃털이 빠지면 정상 셔틀콕과 외형이 달라지므로, 손상이 클수록 외형·형상 "
+                        "기준만 조금씩 완화하고 운동 연속성 기준은 그대로 둡니다. "
+                        "고정된 정상 셔틀콕 template 하나로 모든 조건을 판정하지 않기 위한 설정입니다."),
+        "center_label": "중심 정의 (trajectory 에 기록할 대표 위치)",
+        "center_desc": ("bbox = 추적 상자 중심, mask_centroid = 분리된 물체 영역의 무게중심, "
+                        "weighted_centroid = 밝기·내부거리로 가중한 중심, cork_center = 코르크 중심. "
+                        "auto 는 첫 프레임에서 하나를 골라 **그 실행 내내 같은 정의를 유지**합니다 — "
+                        "손상 조건이 달라도 같은 기준으로 비교하기 위해서입니다. "
+                        "깃털이 비대칭으로 빠진 셔틀콕에서는 mask_centroid 가 남은 깃털 쪽으로 끌리므로 "
+                        "cork_center 또는 weighted_centroid 가 조건 간 비교에 더 안정적입니다."),
+        "predicted_run_label": "연속 예측 허용 프레임 수",
+        "predicted_run_desc": ("검출이 실패한 구간을 운동모델 예측으로 몇 프레임까지 이을지 정합니다. "
+                               "이 값을 넘으면 좌표를 지어내지 않고 LOST 로 비워 둡니다. "
+                               "0 으로 두면 예측으로 잇지 않습니다."),
+        "raw_label": "추적 중 스무딩 끄기 (RAW)",
+        "raw_desc": ("켜 두면 추적 단계에서는 위치를 전혀 매끄럽게 만들지 않습니다. 스무딩은 물리적 "
+                     "운동 자체를 바꿀 수 있으므로, 추적 → 검증 → (필요하면) 스무딩 → 물리 분석 "
+                     "순서로 분리하는 것이 안전합니다. 스무딩이 필요하면 6단계의 '궤적 수정'을 쓰세요."),
+    },
+
+    "validate": {
+        "header": "추적 검증 (기준 궤적과 비교)",
+        "ref_upload": "기준 궤적 CSV (frame, x_px, y_px)",
+        "ref_desc": ("사람이 직접 찍은 좌표, 다른 추적기 결과, 또는 합성 영상의 정답 궤적을 "
+                     "올리세요. 열 이름은 frame / x_px / y_px 처럼 흔한 이름을 자동으로 찾습니다. "
+                     "이 기준이 있어야 '얼마나 정확한가'를 숫자로 말할 수 있습니다."),
+        "ref_loaded": "기준 궤적 '{name}' 을 읽었습니다 — {n}개 프레임 (프레임 {first} ~ {last}).",
+        "ref_failed": "기준 궤적을 읽지 못했습니다 — {error}",
+        "ref_none": "기준 궤적 파일을 선택하세요.",
+        "ref_cleared": "기준 궤적을 지웠습니다.",
+        "run_button": "기준 궤적과 비교 검증",
+        "run_desc": ("AI 궤적과 기준 궤적의 위치·속도 오차, 추적 성공률, 그리고 두 궤적에서 각각 "
+                     "계산한 물리량(v0, 비행시간, 도달거리, 최고높이, 평균속력, 속력 감쇠율, "
+                     "beta, C_D)의 상대오차를 구합니다."),
+        "clear_button": "기준 궤적 지우기",
+        "metrics_table": "추적 오차 · 성공률",
+        "physics_table": "물리량 비교 (AI vs 기준)",
+        "verdict_box": "판정",
+        "no_track": "추적 결과가 없습니다. 먼저 Tracking 을 실행하세요.",
+        "no_reference": "기준 궤적이 없습니다. 먼저 기준 궤적 CSV 를 올리세요.",
+        "no_overlap": "AI 궤적과 기준 궤적에 겹치는 프레임이 없습니다. 프레임 번호 기준이 같은지 확인하세요.",
+        "failed": "검증 실패 — {error}",
+        "col_metric": "항목", "col_value": "값", "col_unit": "단위",
+        "m_compared": "비교한 프레임 수",
+        "m_mae": "위치 오차 MAE",
+        "m_rmse": "위치 오차 RMSE",
+        "m_median": "위치 오차 중앙값",
+        "m_p95": "위치 오차 95 백분위",
+        "m_max": "최대 위치 오차",
+        "m_success": "추적 성공률 (실제 검출 기준)",
+        "m_coverage": "좌표가 기록된 비율 (예측 포함)",
+        "m_lost": "손실 프레임 비율",
+        "m_predicted": "예측으로 채운 프레임 수",
+        "m_breaks": "추적 끊김 횟수",
+        "m_recovery": "회복 성공률",
+        "m_vmae": "속도 오차 MAE",
+        "m_vrmse": "속도 오차 RMSE",
+        "m_vrel": "속도 오차 (기준 평균속력 대비)",
+        "c_position": "위치 RMSE {rmse:.2f}px = 셔틀콕 크기 {size:.1f}px 의 {ratio:.2f}배 (기준 {limit:.2f}배 이하)",
+        "c_position_px": "위치 RMSE {rmse:.2f}px (셔틀콕 크기를 알 수 없어 비율 판정은 생략)",
+        "c_success": "추적 성공률 {value:.1f}% (기준 {limit:.0f}% 이상)",
+        "c_lost": "손실 프레임 비율 {value:.1f}% (기준 {limit:.0f}% 이하)",
+        "c_velocity": "속도 오차 {value:.1f}% (기준 {limit:.0f}% 이하)",
+        "c_physics": "가장 큰 물리량 오차 — {name} {value:.2f}% (기준 {limit:.0f}% 이하)",
+        "verdict_yes": ("### 판정: 이 조건에서는 물리 연구 데이터로 사용할 수 있습니다\n"
+                        "아래 기준을 모두 통과했습니다. 다만 이 판정은 지금 올린 기준 궤적과 이 영상에 "
+                        "대해서만 유효합니다 — 촬영 조건이나 손상 조건이 바뀌면 다시 검증하세요."),
+        "verdict_conditional": ("### 판정: 조건부 사용 가능\n"
+                                "핵심 기준은 통과했지만 아래 ❌ 항목이 남아 있습니다. 해당 프레임을 "
+                                "수동으로 확인·수정한 뒤 다시 검증하거나, 그 구간을 분석에서 제외하세요."),
+        "verdict_no": ("### 판정: 지금 상태로는 물리 연구 데이터로 쓸 수 없습니다\n"
+                       "아래 ❌ 항목이 물리량 계산에 직접 영향을 줍니다. 이상 프레임을 수정하고 "
+                       "다시 추적·검증하세요."),
+        "verdict_insufficient": "판정에 필요한 수치를 계산하지 못했습니다 (비교 가능한 프레임이 너무 적습니다).",
+        "verdict_basis": "**판정 근거 (기준값 대비 실측값)**",
+        "verdict_predicted_note": ("참고: {n}개 프레임이 실제 검출이 아니라 운동모델 예측으로 채워졌습니다. "
+                                   "CSV 의 source 열로 구분되어 있으니, 필요하면 그 프레임을 빼고 다시 "
+                                   "계산해 결과가 달라지는지 확인하세요."),
+        "verdict_reference_note": "기준 궤적: {name}",
+        "export_button": "연구용 궤적 CSV 내보내기",
+        "export_desc": ("frame, time, x, y, confidence, tracking_status, source, vx, vy, speed, ax, ay 를 "
+                        "저장합니다. source 로 관측(DETECTED)·예측(PREDICTED)·회복(RECOVERED)·"
+                        "수동(MANUAL)을 구분할 수 있고, derivative_reliable 열은 예측 프레임에 인접해 "
+                        "미분값을 믿기 어려운 지점을 표시합니다."),
+    },
+
     "check": {
         "header": "이상 프레임 찾기 · 수동 수정",
         "conf_threshold": "선택 · 이상 판정 신뢰도 기준",
@@ -999,6 +1091,15 @@ STRINGS = {
         "retrack_done": "프레임 {frame}부터 {n}프레임을 다시 추적했습니다. 이전 구간은 유지되었습니다.",
         "retrack_need_seed": "프레임 {frame}에 유효한 좌표가 없습니다. 먼저 영상에서 올바른 위치를 클릭하세요.",
         "retrack_failed": "재추적 실패 — {error}",
+        "local_retrack_button": "이 프레임 주변만 다시 추적",
+        "local_retrack_window": "선택 · 재추적할 프레임 수",
+        "local_retrack_desc": ("수정한 위치를 기준으로 뒤쪽 몇 프레임만 다시 추적합니다. 전체를 다시 돌리지 않으므로 이미 확인이 끝난 구간의 결과는 그대로 남습니다."),
+        "local_retrack_done": "프레임 {start}~{end} 구간만 다시 추적했습니다.",
+        "reason_velocity": "속도 급변",
+        "reason_accel": "가속도 급변",
+        "reason_size": "크기 급변",
+        "reason_predicted": "예측으로 채운 프레임",
+        "reason_status": "추적 상태 불량",
         "status_bulk_deleted": "이상 프레임 {n}개의 좌표를 삭제했습니다. 이제 영상에서 올바른 위치를 몇 군데 클릭해 주세요.",
         "table": "이상 프레임 목록",
         "status": "검사 결과",
@@ -1197,6 +1298,8 @@ STRINGS = {
         "benchmark_line": "         성능 — 처리 {frames}프레임 / {elapsed:.2f}초 / 평균 {fps:.1f} fps / 추적기 {backend} / 분석 배율 {scale:.2f} / 최대 메모리 {rss:.0f}MB{gpu}",
         "benchmark_gpu": " / GPU 최대 {gpu:.0f}MB",
         "tracking_drift_report": "         Anchor 감시: 드리프트 {drift}프레임 / 전역 재획득 성공 {reacquired}회 / 기록 제외 {dropped}프레임",
+        "shuttlecock_line": ("셔틀콕 전용 추적: 손상 조건 {damage} · 중심 정의 {center} · 예측으로 채운 프레임 {predicted}개 · 추적 중 스무딩 {smooth}. 예측 프레임은 CSV 의 source 열에서 PREDICTED 로 구분됩니다."),
+        "shuttlecock_predicted_warn": ("⚠ 예측으로 채운 프레임이 {predicted}개({ratio:.0f}%)입니다. 물리 분석 전에 해당 프레임을 확인하거나 제외하세요."),
         "tracking_drift_warn": "⚠ 처음 지정한 물체와 다른 대상을 잡은 프레임이 {drift}개 감지되어 해당 구간은 좌표를 기록하지 않았습니다. Profile을 대상에 맞게(추 → Pendulum) 바꾸고, Mode를 Conservative로 두거나, 6단계에서 위치를 다시 지정한 뒤 '이어서 추적'을 사용하세요.",
         "tracking_failed": "추적 중 오류가 발생하여 중단되었습니다: {error}",
         "tracker_backend_unavailable": "이 OpenCV 빌드에서 사용 가능한 Tracker 알고리즘을 찾을 수 없습니다 (opencv-contrib-python 설치 필요).",
@@ -5689,6 +5792,8 @@ class TrackedObject:
         self.color = color
         self.trajectory = pd.DataFrame(columns=[
             'frame', 't', 'x_px', 'y_px', 'w', 'h', 'conf', 'keyframe',
+                                                                                     
+            'source', 'tracking_status', 'center_method', 'center_confidence',
             'x_cork', 'y_cork', 'x_skirt', 'y_skirt', 'skirt_keyframe',
             'orientation_deg', 'velocity_angle_deg', 'wobble_deg',
             'stabilized', 'stabilization_frame', 'stabilization_time_s',
@@ -5870,6 +5975,228 @@ class _OpticalFlowTracker:
         return True, (x, y, w, h)
 
 
+class ShuttlecockCenterEstimator:
+    """셔틀콕의 '대표 위치(center position)'를 한 가지 기준으로 일관되게 추정한다.
+
+    연구에서 필요한 것은 시각적으로 가장 잘 보이는 부분의 위치가 아니라, 모든 프레임에서
+    같은 정의로 계산된 중심이다. 그래서 이 클래스는 후보 중심을 여러 개 계산해 두되,
+    한 번 고른 정의(method)를 촬영 조건·손상 조건이 달라져도 그대로 유지한다.
+
+    후보 중심
+      bbox              : 추적 상자의 기하 중심 (마스크가 없어도 항상 계산됨)
+      mask_centroid     : 분리된 물체 마스크의 1차 모멘트 중심
+      weighted_centroid : 마스크 안에서 밝기 x 내부거리로 가중한 중심
+                          (깃털 끝처럼 얇은 부분의 기여를 줄인다)
+      cork_center       : 마스크 안에서 가장 밝고 뭉쳐 있는 덩어리(코르크)의 중심
+
+    깃털이 빠진 셔틀콕은 mask_centroid 가 남은 깃털 쪽으로 끌려가므로, 손상 조건을
+    비교하는 실험에서는 cork_center 또는 weighted_centroid 가 조건 사이에서 더 일관된
+    기준이 된다. 다만 어떤 기준을 쓸지는 연구자가 고르거나(auto 가 아닌 값) 첫 프레임에서
+    한 번 정해지고, 그 뒤로는 바뀌지 않는다.
+    """
+
+    METHODS = ("auto", "bbox", "mask_centroid", "weighted_centroid", "cork_center", "blended")
+
+    @staticmethod
+    def _filled_mask(mask: Optional[np.ndarray], keep_thin: bool = False) -> Optional[np.ndarray]:
+        """마스크를 이진화하고 내부 구멍을 메운다.
+
+        keep_thin=False (기본, 일반 물체) 에서는 '가장 두꺼운 덩어리만 남기기'
+        (_core_blob_mask)로 막대·실처럼 물체를 가로지르는 구조물을 걸러낸다. 진자의 실이
+        상자를 지나가는 경우가 대표적이다.
+
+        keep_thin=True (셔틀콕) 에서는 그 처리를 쓰지 않는다. 깃털 스커트는 얇지만 물체의
+        일부이고, 스커트를 지우면 mask centroid 와 weighted centroid 가 코르크 중심과
+        같아져 네 가지 중심 정의가 하나로 붕괴한다. 그러면 어느 정의가 나은지 비교하는 것
+        자체가 불가능해진다. 다만 마스크가 패치의 60% 를 넘게 덮으면(=배경까지 삼켰을
+        가능성이 큰 경우) 이때는 덩어리 추출로 되돌린다.
+        """
+        if mask is None or mask.size == 0:
+            return None
+        binary = np.where(mask > 128, 255, 0).astype(np.uint8)
+        if int(np.count_nonzero(binary)) < 6:
+            return None
+        h, w = binary.shape[:2]
+        if (not keep_thin) or float(np.count_nonzero(binary)) > 0.60 * float(binary.size):
+            core = VideoProcessor._core_blob_mask(binary, (w / 2.0, h / 2.0))
+            if core is not None:
+                binary = core
+        return VideoProcessor._fill_mask_holes(binary, (w / 2.0, h / 2.0))
+
+    @staticmethod
+    def _cork_blob(gray: np.ndarray, filled: np.ndarray) -> Optional[np.ndarray]:
+        """마스크 안에서 코르크로 볼 수 있는 '밝고 뭉친' 부분만 남긴다.
+
+        코르크는 깃털 스커트보다 밝고 속이 차 있어서, 마스크 내부 밝기의 상위 분위수로
+        자른 뒤 가장 큰 연결 성분을 고르면 대체로 코르크가 남는다. 밝기 대비가 없어
+        분위수 컷이 마스크 전체를 그대로 남기면(=구분 실패) None 을 돌려준다.
+        """
+        vals = gray[filled > 0]
+        if vals.size < 12:
+            return None
+        lo, hi = float(np.percentile(vals, 25)), float(np.percentile(vals, 95))
+        if hi - lo < 8.0:
+            return None
+        thresh = float(np.percentile(vals, 70))
+        bright = ((gray >= thresh) & (filled > 0)).astype(np.uint8)
+        if int(np.count_nonzero(bright)) < 6:
+            return None
+        try:
+            n, labels, stats, _cent = cv2.connectedComponentsWithStats(bright, 8)
+        except Exception:
+            return None
+        if n <= 1:
+            return None
+        areas = stats[1:, cv2.CC_STAT_AREA]
+        pick = int(np.argmax(areas)) + 1
+        blob = (labels == pick).astype(np.uint8) * 255
+        area = float(np.count_nonzero(blob))
+        total = float(np.count_nonzero(filled))
+        if area < 6.0 or area > 0.85 * total:
+            return None
+        return blob
+
+    @staticmethod
+    def candidates(patch_bgr: Optional[np.ndarray],
+                   mask: Optional[np.ndarray] = None,
+                   keep_thin: bool = True) -> Dict[str, Tuple[float, float]]:
+        """패치 좌표계에서 계산 가능한 중심 후보를 모두 돌려준다.
+
+        keep_thin 은 깃털 스커트처럼 얇은 부분을 마스크에 남길지 정한다(_filled_mask 참고).
+        셔틀콕에서는 남겨야 하므로 기본값이 True 다.
+        """
+        out: Dict[str, Tuple[float, float]] = {}
+        if patch_bgr is None or patch_bgr.size == 0:
+            return out
+        ph, pw = patch_bgr.shape[:2]
+        out["bbox"] = (pw / 2.0, ph / 2.0)
+        gray = cv2.cvtColor(patch_bgr, cv2.COLOR_BGR2GRAY) if patch_bgr.ndim == 3 else patch_bgr
+        filled = ShuttlecockCenterEstimator._filled_mask(
+            mask if mask is not None else VideoProcessor._segment_object_mask(patch_bgr, dilate=False),
+            keep_thin=keep_thin)
+        if filled is None:
+            return out
+
+        try:
+            mom = cv2.moments(filled, binaryImage=True)
+            if mom.get("m00", 0.0) > 4.0:
+                out["mask_centroid"] = (float(mom["m10"] / mom["m00"]),
+                                        float(mom["m01"] / mom["m00"]))
+        except Exception:
+            pass
+
+        # 밝기 x 내부거리 가중: 깃털 끝(얇고 어두움)의 기여를 줄여 흔들림을 억제한다.
+        try:
+            dist = cv2.distanceTransform(filled, cv2.DIST_L2, 5)
+            g = gray.astype(np.float32)
+            inside = filled > 0
+            if int(np.count_nonzero(inside)) >= 6:
+                gmin, gmax = float(g[inside].min()), float(g[inside].max())
+                gnorm = (g - gmin) / (gmax - gmin) if gmax - gmin > 1e-6 else np.ones_like(g)
+                dmax = float(dist.max())
+                dnorm = dist / dmax if dmax > 1e-6 else np.ones_like(dist)
+                wgt = np.where(inside, (0.5 + 0.5 * np.clip(gnorm, 0.0, 1.0)) * (0.25 + 0.75 * dnorm), 0.0)
+                tot = float(wgt.sum())
+                if tot > 1e-6:
+                    ys, xs = np.mgrid[0:filled.shape[0], 0:filled.shape[1]]
+                    out["weighted_centroid"] = (float((wgt * xs).sum() / tot),
+                                                float((wgt * ys).sum() / tot))
+        except Exception:
+            pass
+
+        blob = ShuttlecockCenterEstimator._cork_blob(gray, filled)
+        if blob is not None:
+            try:
+                mom = cv2.moments(blob, binaryImage=True)
+                if mom.get("m00", 0.0) > 4.0:
+                    out["cork_center"] = (float(mom["m10"] / mom["m00"]),
+                                          float(mom["m01"] / mom["m00"]))
+            except Exception:
+                pass
+
+                                                                                     
+                                                                                     
+                                                                                     
+        core_peak = None
+        try:
+            dist = cv2.distanceTransform(filled, cv2.DIST_L2, 5)
+            _mn, core_r, _ml, core_loc = cv2.minMaxLoc(dist)
+            if core_r is not None and float(core_r) >= 1.5:
+                core_peak = (float(core_loc[0]), float(core_loc[1]))
+                out["core_peak"] = core_peak
+        except Exception:
+            pass
+        blend_src = [p for p in (out.get("mask_centroid"), core_peak) if p is not None]
+        if blend_src:
+            out["blended"] = (float(np.mean([p[0] for p in blend_src])),
+                              float(np.mean([p[1] for p in blend_src])))
+        return out
+
+    @staticmethod
+    def choose_method(cands: Dict[str, Tuple[float, float]],
+                      shuttlecock: bool = True) -> str:
+        """auto 일 때 쓸 중심 정의를 한 번만 고른다(이후 실행 내내 고정).
+
+        셔틀콕에서는 손상 조건 비교가 목적이므로 남은 깃털 배치에 흔들리지 않는 기준이
+        필요하다. 코르크를 찾을 수 있으면 cork_center 를, 그렇지 않으면
+        weighted_centroid 를, 마스크 자체가 없으면 bbox 를 쓴다.
+
+        셔틀콕이 아닌 경우에는 기존 동작(마스크 무게중심과 내부 최심점의 평균)을 그대로
+        유지한다 — 진자·구슬처럼 다른 대상에 쓰던 결과가 이번 변경으로 달라지지 않게 하기
+        위해서다.
+        """
+        if not shuttlecock:
+            for name in ("blended", "mask_centroid", "core_peak"):
+                if name in cands:
+                    return name
+            return "bbox"
+        if "cork_center" in cands:
+            return "cork_center"
+        if "weighted_centroid" in cands:
+            return "weighted_centroid"
+        if "mask_centroid" in cands:
+            return "mask_centroid"
+        return "bbox"
+
+    @staticmethod
+    def estimate(patch_bgr: Optional[np.ndarray], mask: Optional[np.ndarray],
+                 method: str, locked: Optional[str] = None,
+                 keep_thin: bool = True) -> Optional[Dict[str, Any]]:
+        """지정한 기준으로 패치 좌표계 중심과 그 신뢰도를 계산한다.
+
+        신뢰도는 '후보들이 서로 얼마나 모여 있는가'로만 매긴다. 후보가 크게 어긋나면
+        어느 정의를 쓰든 그 프레임의 중심 추정은 불안정하다는 뜻이므로 낮은 값을 준다.
+        """
+        cands = ShuttlecockCenterEstimator.candidates(patch_bgr, mask, keep_thin=keep_thin)
+        if not cands:
+            return None
+                                                                                     
+                                                                                     
+                                                                                     
+        want = str(locked or method or "bbox")
+        use = want
+        if use == "auto" or use not in cands:
+            use = ShuttlecockCenterEstimator.choose_method(cands, shuttlecock=keep_thin)
+        fallback = bool(want not in ("auto", "") and want != use)
+        cx, cy = cands[use]
+                                                                                     
+        pts = np.asarray([v for k, v in cands.items()
+                          if k not in ("core_peak", "blended")] or list(cands.values()),
+                         dtype=float)
+        ph, pw = patch_bgr.shape[:2]
+        diag = max(4.0, float(np.hypot(pw, ph)))
+        spread = float(np.max(np.hypot(pts[:, 0] - cx, pts[:, 1] - cy))) if len(pts) > 1 else 0.0
+        confidence = float(np.exp(-spread / (0.35 * diag)))
+                                                                                     
+                                                                                     
+        if fallback:
+            confidence *= 0.5
+        return {"cx": float(cx), "cy": float(cy), "method": use,
+                "requested_method": want, "fallback": fallback,
+                "confidence": float(np.clip(confidence, 0.0, 1.0)),
+                "spread_px": spread, "candidates": cands}
+
+
 class VideoProcessor:
     def __init__(self, min_iou_for_match: float = 0.1, appearance_threshold: float = 0.35,
                  max_jump_px: float = 150.0, max_lost_frames: int = 30):
@@ -5942,6 +6269,25 @@ class VideoProcessor:
         self.process_scale: float = 0.0
         self.hard_drift_ratio: float = 0.6
         self.anchor_refresh_min: float = 0.80
+                                                                              
+                                                                              
+        self.damage_condition: str = "NORMAL"
+        self.center_method: str = "auto"
+        self._resolved_center_method: Optional[str] = None
+                                                                              
+                                                                              
+        self.max_predicted_run: int = 5
+                                                                              
+                                                                              
+        self.roi_stage_scales: Tuple[float, ...] = (2.5, 5.0, 9.0)
+                                                                              
+                                                                             
+        self.blur_conf_penalty: float = 0.35
+        self.last_center_stats: Dict[str, Any] = {}
+                                                                                     
+                                                                                     
+                                                                                     
+        self.raw_tracking_only: bool = True
 
     _feat_cache: Dict[Tuple[Any, ...], Any] = {}
 
@@ -6076,20 +6422,96 @@ class VideoProcessor:
     def _appearance_score(frame: np.ndarray, bbox: Tuple[float, float, float, float],
                           template: Optional[np.ndarray],
                           hist_ref: Optional[np.ndarray] = None,
-                          mask_ref: Optional[np.ndarray] = None) -> float:
+                          mask_ref: Optional[np.ndarray] = None,
+                          small_object_mode: bool = False) -> float:
+        """앵커 외형과 후보 영역의 일치도.
+
+        small_object_mode 는 작고 크기가 변하는 물체(=셔틀콕)를 위한 두 가지 보정을 켠다.
+
+        1) 배율 허용
+           상자를 몇 가지 배율로 바꿔가며 비교하고 가장 잘 맞는 값을 쓴다. 셔틀콕이
+           카메라에서 멀어지면 상자 안에서 물체가 차지하는 비율이 줄어드는데, 고정 배율로만
+           비교하면 이것이 '외형이 달라졌다 = 놓쳤다'로 잘못 읽힌다. 실제로 달라진 것은
+           크기뿐이므로, 크기를 맞춰본 뒤에도 안 맞을 때만 불일치로 본다.
+
+        2) 색 히스토그램의 거부권 제한
+           원래는 min(모양 일치도, 색 일치도) 였다. 작은 물체에서는 색 히스토그램에 들어가는
+           화소가 수백 개뿐인데 빈은 1000개가 넘어, 상관계수 자체가 통계적으로 불안정하다.
+           그런 값에 거부권을 주면 멀쩡한 추적이 '색이 다르다'는 이유로 버려진다. 그래서
+           히스토그램에 들어간 표본 수로 신뢰도를 매기고, 표본이 적을수록 색의 영향력을
+           줄인다. 표본이 충분하면 예전처럼 그대로 거부권을 갖는다.
+        """
         if template is None:
             return 1.0
-        candidate = VideoProcessor._extract_template(frame, bbox, mask_ref)
-        if candidate is None:
+
+        def _ncc(box) -> float:
+            candidate = VideoProcessor._extract_template(frame, box, mask_ref)
+            if candidate is None:
+                return float('nan')
+            denom = float(np.linalg.norm(template) * np.linalg.norm(candidate))
+            if denom < 1e-9:
+                return float('nan')
+            return float(np.dot(template.ravel(), candidate.ravel()) / denom)
+
+        ncc = _ncc(bbox)
+        if small_object_mode:
+            bx, by, bw, bh = [float(v) for v in bbox]
+            cx, cy = bx + bw / 2.0, by + bh / 2.0
+            for k in (0.65, 0.8, 1.25):
+                nw, nh = bw * k, bh * k
+                if min(nw, nh) < 6.0:
+                    continue
+                alt = _ncc((cx - nw / 2.0, cy - nh / 2.0, nw, nh))
+                if np.isfinite(alt) and (not np.isfinite(ncc) or alt > ncc):
+                    ncc = alt
+        if not np.isfinite(ncc):
             return 0.0
-        denom = float(np.linalg.norm(template) * np.linalg.norm(candidate))
-        if denom < 1e-9:
-            return 0.0
-        ncc = float(np.dot(template.ravel(), candidate.ravel()) / denom)
         if hist_ref is None:
             return ncc
         hist_sim = VideoProcessor._hist_similarity(frame, bbox, hist_ref, mask_ref)
+        if small_object_mode:
+            rel = VideoProcessor._hist_reliability(frame, bbox, hist_ref, mask_ref)
+                                                                                     
+            hist_sim = hist_sim + (1.0 - rel) * (1.0 - hist_sim)
         return float(min(ncc, hist_sim))
+
+    @staticmethod
+    def _hist_reliability(frame: np.ndarray, bbox: Tuple[float, float, float, float],
+                          hist_ref: Optional[np.ndarray],
+                          mask_ref: Optional[np.ndarray] = None) -> float:
+        """색 히스토그램 비교를 얼마나 믿을 수 있는지 (0~1).
+
+        두 가지를 함께 본다.
+
+        1) 분별력 — 기준 히스토그램이 실제로 값을 가진 빈이 몇 개인가.
+           흰 셔틀콕과 회색 코트처럼 색이 거의 없는 장면에서는 12x12x8 빈 중 열 개
+           남짓에만 값이 몰린다. 그런 히스토그램은 물체와 배경을 구분하지 못하므로,
+           상관계수가 낮게 나와도 '다른 물체'라는 증거가 되지 못한다.
+        2) 표본 충분성 — 빈 하나당 화소가 몇 개나 들어갔는가.
+           작은 물체는 화소 수 자체가 적어 상관계수의 분산이 크다.
+
+        둘 중 나쁜 쪽을 신뢰도로 삼는다. 신뢰도가 낮으면 색이 외형 판정에 거부권을
+        갖지 못하게 하되, 색은 점수 계산에서 color_hist 항목으로 여전히 반영된다.
+        """
+        if hist_ref is None:
+            return 0.0
+        try:
+            occupied = int(np.count_nonzero(np.asarray(hist_ref) > 1e-6))
+            if occupied <= 0:
+                return 0.0
+            x, y, w, h = [float(v) for v in bbox]
+            h_img, w_img = frame.shape[:2]
+            x0, y0 = max(0, int(round(x))), max(0, int(round(y)))
+            x1, y1 = min(w_img, int(round(x + w))), min(h_img, int(round(y + h)))
+            if x1 - x0 < 2 or y1 - y0 < 2:
+                return 0.0
+                                                                                     
+            n_px = 0.25 * float((x1 - x0) * (y1 - y0))
+            discriminative = float(np.clip(occupied / 64.0, 0.0, 1.0))
+            sufficient = float(np.clip(n_px / (4.0 * occupied), 0.0, 1.0))
+            return float(min(discriminative, sufficient))
+        except Exception:
+            return 0.0
 
     def _optical_flow_shift(self, prev_gray: Optional[np.ndarray], curr_gray: Optional[np.ndarray],
                             center: Tuple[float, float], box: Tuple[float, float],
@@ -6180,6 +6602,35 @@ class VideoProcessor:
 
     _CENTER_WEIGHT: Optional[np.ndarray] = None
 
+    DAMAGE_CONDITIONS: Dict[str, Dict[str, float]] = {
+                                                                                     
+                                                                                     
+                                                                                  
+        "NORMAL": {"appearance_relax": 1.00, "size_tol": 1.00, "aspect_tol": 1.00,
+                   "shape_weight": 1.00, "anchor_gate_scale": 1.00},
+        "2_FEATHERS_SYMMETRIC": {"appearance_relax": 0.92, "size_tol": 1.10, "aspect_tol": 1.10,
+                                 "shape_weight": 0.90, "anchor_gate_scale": 0.95},
+        "2_FEATHERS_ASYMMETRIC": {"appearance_relax": 0.86, "size_tol": 1.20, "aspect_tol": 1.25,
+                                  "shape_weight": 0.75, "anchor_gate_scale": 0.90},
+        "4_FEATHERS_SYMMETRIC": {"appearance_relax": 0.86, "size_tol": 1.20, "aspect_tol": 1.20,
+                                 "shape_weight": 0.80, "anchor_gate_scale": 0.90},
+        "4_FEATHERS_ASYMMETRIC": {"appearance_relax": 0.78, "size_tol": 1.35, "aspect_tol": 1.40,
+                                  "shape_weight": 0.65, "anchor_gate_scale": 0.85},
+    }
+
+    def get_damage_prior(self) -> Dict[str, float]:
+        """연구자가 고른 손상 조건에 맞춰 검출 문턱을 얼마나 풀지 돌려준다.
+
+        정상 셔틀콕의 고정 shape template 만으로는 깃털이 빠진 개체를 놓치므로, 손상이
+        클수록 외형/형상 기준을 완화하고 대신 운동 연속성 쪽 비중을 남긴다. 조건을
+        지정하지 않으면 NORMAL 과 동일하게(=아무것도 완화하지 않고) 동작한다.
+        """
+        return dict(self.DAMAGE_CONDITIONS.get(str(self.damage_condition).upper(),
+                                               self.DAMAGE_CONDITIONS["NORMAL"]))
+
+    def is_shuttlecock_mode(self) -> bool:
+        return str(self.tracking_profile) == "Shuttlecock"
+
     TRACKING_PROFILES: Dict[str, Dict[str, float]] = {
         "Generic": {
             "distance": 1.0, "direction": 0.8, "speed": 0.7, "size": 0.6,
@@ -6225,6 +6676,45 @@ class VideoProcessor:
         "Balanced": {"accept_score": 0.35, "max_jump_factor": 5.0, "redetect_after": 5},
         "Aggressive": {"accept_score": 0.15, "max_jump_factor": 8.0, "redetect_after": 10},
     }
+
+                                                                                     
+                                                                                     
+                                                                                     
+    SOURCE_DETECTED = "DETECTED"
+    SOURCE_PREDICTED = "PREDICTED"
+    SOURCE_RECOVERED = "RECOVERED"
+    SOURCE_MANUAL = "MANUAL"
+                                                                                     
+                                                                                     
+    SOURCE_INTERPOLATED = "INTERPOLATED"
+
+    STATUS_HIGH = "HIGH"
+    STATUS_MEDIUM = "MEDIUM"
+    STATUS_LOW = "LOW"
+    STATUS_LOST = "LOST"
+
+    @staticmethod
+    def status_from_confidence(conf: float, source: str = "DETECTED") -> str:
+        """confidence 와 출처로 tracking_status 를 정한다.
+
+        예측으로 채운 프레임은 아무리 운동모델이 잘 맞아도 실제 관측이 아니므로 LOW 를
+        넘지 못하게 막는다 — 연구 데이터에서 예측 구간이 관측 구간처럼 보이면 안 된다.
+        """
+        try:
+            value = float(conf)
+        except (TypeError, ValueError):
+            return VideoProcessor.STATUS_LOST
+        if not np.isfinite(value) or value <= 0.0:
+            return VideoProcessor.STATUS_LOST
+        if str(source) in (VideoProcessor.SOURCE_PREDICTED, VideoProcessor.SOURCE_INTERPOLATED):
+            return VideoProcessor.STATUS_LOW
+        if str(source) == VideoProcessor.SOURCE_MANUAL:
+            return VideoProcessor.STATUS_HIGH
+        if value >= 0.75:
+            return VideoProcessor.STATUS_HIGH
+        if value >= 0.50:
+            return VideoProcessor.STATUS_MEDIUM
+        return VideoProcessor.STATUS_LOW
 
     WARNING_LOW_CONFIDENCE = "Low Confidence"
     WARNING_POSITION = "Large Position Change"
@@ -6404,13 +6894,22 @@ class VideoProcessor:
             s_direction = 0.5
             s_speed = float(np.exp(-dist / (3.0 * diag)))
 
+                                                                                     
+                                                                                    
+                                                                                
+        _dmg = self.get_damage_prior() if self.is_shuttlecock_mode() else {}
+        _size_tol = float(_dmg.get("size_tol", 1.0))
+        _aspect_tol = float(_dmg.get("aspect_tol", 1.0))
         area_ratio = max(1e-6, (bw * bh)) / max(1e-6, ref_w * ref_h)
-        s_size = float(np.exp(-abs(np.log(area_ratio))))
+        s_size = float(np.exp(-abs(np.log(area_ratio)) / max(1e-6, _size_tol)))
         aspect_c = bw / max(1e-6, bh)
         aspect_r = ref_w / max(1e-6, ref_h)
-        s_aspect = float(np.exp(-abs(np.log(max(1e-6, aspect_c / max(1e-6, aspect_r))))))
+        s_aspect = float(np.exp(-abs(np.log(max(1e-6, aspect_c / max(1e-6, aspect_r))))
+                                / max(1e-6, _aspect_tol)))
 
-        appearance = self._appearance_score(frame, candidate["bbox"], template, hist_ref, mask_ref)
+                                                                                     
+        appearance = self._appearance_score(frame, candidate["bbox"], template, hist_ref, mask_ref,
+                                            small_object_mode=self.is_shuttlecock_mode())
         s_appearance = float(np.clip(appearance, 0.0, 1.0)) if template is not None else 0.5
 
         if flow_center is not None:
@@ -6445,12 +6944,24 @@ class VideoProcessor:
                                          0.2 * parts.get("orb", 0.5), 0.0, 1.0))
         confidence = float(np.clip(0.4 * float(np.clip(score, 0.0, 1.0)) + 0.3 * appearance_score +
                                    0.15 * motion_score + 0.15 * prediction_score, 0.0, 1.0))
+                                                                                     
+                                                                                    
+                                                                                     
+        blur_factor = 1.0 - float(np.clip(self.blur_conf_penalty, 0.0, 0.9)) * \
+            float(np.clip((0.35 - float(blur)) / 0.35, 0.0, 1.0))
+        confidence *= blur_factor
+                                                                                     
+                                                                                     
+        if candidate.get("source") in ("kalman", "motion", "physics_prediction", "optical_flow"):
+            confidence = min(confidence, 0.45)
+        confidence = float(np.clip(confidence, 0.0, 1.0))
         result = dict(candidate)
         result.update({"score": float(np.clip(score, 0.0, 1.0)), "appearance": float(appearance),
                        "parts": parts, "center": (cx, cy), "distance": dist,
                        "step": raw_step, "area_ratio": float(area_ratio),
                        "confidence": confidence, "motion_score": motion_score,
-                       "prediction_score": prediction_score, "appearance_score": appearance_score})
+                       "prediction_score": prediction_score, "appearance_score": appearance_score,
+                       "blur_level": float(blur), "blur_factor": float(blur_factor)})
         return result
 
     @staticmethod
@@ -6869,8 +7380,23 @@ class VideoProcessor:
         except Exception:
             return binary
 
-    def _center_on_object(self, frame: np.ndarray, bbox: Tuple[float, float, float, float],
-                          max_shift_ratio: float = 0.45) -> Optional[Tuple[float, float]]:
+    def get_center_method(self) -> str:
+        """이번 실행에서 쓸 중심 정의를 돌려준다(한 번 정해지면 실행 내내 고정)."""
+        return str(self._resolved_center_method or self.center_method or "auto")
+
+    def reset_center_method(self) -> None:
+        """새 추적을 시작할 때 auto 로 정해둔 중심 정의를 다시 고르게 한다."""
+        self._resolved_center_method = None
+
+    def _estimate_center(self, frame: np.ndarray, bbox: Tuple[float, float, float, float],
+                         max_shift_ratio: float = 0.45,
+                         apply_min_shift: bool = True) -> Optional[Dict[str, Any]]:
+        """추적 상자 주변을 다시 분리해 셔틀콕의 대표 위치를 추정한다.
+
+        중심 정의(bbox / mask centroid / weighted centroid / cork center)는
+        ShuttlecockCenterEstimator 가 계산하고, 여기서는 '얼마나 옮겨도 되는가'만 정한다.
+        보정량이 상자 크기에 비해 지나치면(=다른 물체를 잡았을 가능성) 보정을 포기한다.
+        """
         x, y, w, h = [float(v) for v in bbox]
         if w < 6.0 or h < 6.0:
             return None
@@ -6883,51 +7409,39 @@ class VideoProcessor:
         y1 = int(np.clip(round(cy + h / 2.0 + pad_y), y0 + 2, h_img))
         if x1 - x0 < 10 or y1 - y0 < 10:
             return None
-        mask = self._segment_object_mask(frame[y0:y1, x0:x1], dilate=False)
-        if mask is None:
+        patch = frame[y0:y1, x0:x1]
+        est = ShuttlecockCenterEstimator.estimate(patch, None, str(self.center_method or "auto"),
+                                                  locked=self._resolved_center_method,
+                                                  keep_thin=self.is_shuttlecock_mode())
+        if est is None:
             return None
-        binary = np.where(mask > 128, 255, 0).astype(np.uint8)
-        if int(np.count_nonzero(binary)) < 6:
-            return None
-        _core = VideoProcessor._core_blob_mask(binary, ((x1 - x0) / 2.0, (y1 - y0) / 2.0))
-        if _core is not None:
-            binary = _core
-        filled = VideoProcessor._fill_mask_holes(binary, ((x1 - x0) / 2.0, (y1 - y0) / 2.0))
-        new_cx = new_cy = None
-        cand_cx: List[float] = []
-        cand_cy: List[float] = []
-        try:
-            mom = cv2.moments(filled, binaryImage=True)
-            if mom.get("m00", 0.0) > 4.0:
-                cand_cx.append(float(mom["m10"] / mom["m00"]))
-                cand_cy.append(float(mom["m01"] / mom["m00"]))
-        except Exception:
-            pass
-        try:
-            dist = cv2.distanceTransform(filled, cv2.DIST_L2, 5)
-            _mn, core_r, _ml, core_loc = cv2.minMaxLoc(dist)
-            if core_r is not None and float(core_r) >= 1.5:
-                cand_cx.append(float(core_loc[0]))
-                cand_cy.append(float(core_loc[1]))
-        except Exception:
-            pass
-        if cand_cx:
-            new_cx = float(np.mean(cand_cx)) + x0
-            new_cy = float(np.mean(cand_cy)) + y0
-        if new_cx is None or new_cy is None:
-            ys, xs = np.where(filled > 0)
-            if len(xs) < 4:
-                return None
-            new_cx = float(xs.mean()) + x0
-            new_cy = float(ys.mean()) + y0
+                                                                                     
+                                                                                     
+        if self._resolved_center_method is None:
+            self._resolved_center_method = est["method"]
+            if str(self.center_method or "auto") == "auto":
+                logger.info(f"중심 정의를 '{est['method']}' 로 고정했습니다 — 이 실행의 모든 "
+                            f"프레임에서 같은 기준으로 중심을 계산합니다.")
+        new_cx = float(est["cx"]) + x0
+        new_cy = float(est["cy"]) + y0
         shift = float(np.hypot(new_cx - cx, new_cy - cy))
         limit = float(max_shift_ratio) * float(max(w, h))
         if shift > limit:
             return None
                                                                           
-        if shift < float(self.center_lock_min_ratio) * float(max(w, h)):
+        if apply_min_shift and shift < float(self.center_lock_min_ratio) * float(max(w, h)):
             return None
-        return float(new_cx), float(new_cy)
+        return {"cx": new_cx, "cy": new_cy, "method": est["method"],
+                "fallback": bool(est.get("fallback", False)),
+                "confidence": float(est["confidence"]), "shift_px": shift,
+                "spread_px": float(est["spread_px"])}
+
+    def _center_on_object(self, frame: np.ndarray, bbox: Tuple[float, float, float, float],
+                          max_shift_ratio: float = 0.45) -> Optional[Tuple[float, float]]:
+        result = self._estimate_center(frame, bbox, max_shift_ratio)
+        if result is None:
+            return None
+        return float(result["cx"]), float(result["cy"])
 
     def _refine_bbox_by_mask(self, frame: np.ndarray, bbox: Tuple[float, float, float, float]
                              ) -> Tuple[Tuple[float, float, float, float], Optional[np.ndarray]]:
@@ -7230,7 +7744,23 @@ class VideoProcessor:
             gate = -1.0
         if gate < 0.0:
             gate = float(self.get_profile_options().get("anchor_gate", 0.45))
+                                                                                     
+                                                                                    
+        if self.is_shuttlecock_mode():
+            gate *= float(self.get_damage_prior().get("anchor_gate_scale", 1.0))
         return float(np.clip(gate, 0.0, 0.95))
+
+    def get_appearance_threshold(self) -> float:
+        """손상 조건을 반영한 외형 유사도 문턱.
+
+        깃털이 빠지면 원래 셔틀콕과의 외형 일치도가 구조적으로 낮아진다. 이때 문턱을
+        그대로 두면 정상적인 추적까지 '외형 불일치'로 버리게 되므로, 조건별로만 완화하고
+        대신 이 완화가 적용됐다는 사실을 confidence 에 남긴다.
+        """
+        base = float(np.clip(float(self.appearance_threshold), 0.0, 0.99))
+        if self.is_shuttlecock_mode():
+            base *= float(self.get_damage_prior().get("appearance_relax", 1.0))
+        return float(np.clip(base, 0.0, 0.99))
 
     def get_process_scale(self, width: int, height: int) -> float:
         try:
@@ -7277,19 +7807,108 @@ class VideoProcessor:
             return 1.0
         return float(np.clip(float(np.mean(vals)), 0.0, 1.0))
 
+    def _recovery_plausible(self, bbox: Tuple[float, float, float, float],
+                            last_pos: Optional[Tuple[float, float]],
+                            last_vel: Optional[Tuple[float, float]],
+                            lost_frames: int, ref_diag: float,
+                            proc_scale: float = 1.0) -> Tuple[bool, str]:
+        """재획득한 위치가 물리적으로 도달 가능한 자리인지 확인한다.
+
+        외형만 보고 재획득하면, 대상이 화면 밖으로 나간 뒤에도 비슷하게 생긴 배경을
+        '찾았다'고 기록할 수 있다. 그러면 실패가 정상 데이터로 둔갑한다. 그래서 두 가지를
+        본다.
+
+          1) 이동 가능 거리 : 놓친 프레임 수 x 그동안 낼 수 있었던 속도보다 멀리 가 있으면 거부
+          2) 진행 방향      : 셔틀콕 한 번의 비행에서 수평 진행 방향은 뒤집히지 않는다.
+                              마지막 속도와 반대쪽에서 찾았다면 다른 물체일 가능성이 크다.
+                              (셔틀콕 profile 에서만 적용한다 — 진자처럼 왕복하는 물체에는
+                               맞지 않는 가정이기 때문이다.)
+
+        어느 쪽이든 걸리면 재획득을 포기한다. 좌표를 비워 두는 편이 틀린 좌표를 남기는
+        것보다 낫다.
+        """
+        if last_pos is None:
+            return True, ""
+        cx = float(bbox[0]) + float(bbox[2]) / 2.0
+        cy = float(bbox[1]) + float(bbox[3]) / 2.0
+        gap = max(1, int(lost_frames))
+        speed = float(np.hypot(*last_vel)) if last_vel is not None else 0.0
+                                                                                     
+                                                                                
+        budget = max(1.5 * float(ref_diag),
+                     2.5 * speed * gap,
+                     0.35 * float(self.max_jump_px) * float(proc_scale) * gap)
+        travel = float(np.hypot(cx - last_pos[0], cy - last_pos[1]))
+        if travel > budget:
+            return False, (f"이동 가능 거리 초과 ({travel:.0f}px > 한계 {budget:.0f}px, "
+                           f"놓친 프레임 {gap}개)")
+        if (self.is_shuttlecock_mode() and last_vel is not None
+                and abs(last_vel[0]) > 0.5 * max(1.0, speed)):
+            if (cx - last_pos[0]) * last_vel[0] < -0.25 * float(ref_diag) * abs(np.sign(last_vel[0])):
+                return False, "진행 방향과 반대쪽에서 발견 (비행 중 수평 방향은 뒤집히지 않음)"
+        return True, ""
+
+    def _staged_local_search(self, gray: Optional[np.ndarray], patch: Optional[np.ndarray],
+                             center: Optional[Tuple[float, float]], ref_diag: float
+                             ) -> Optional[Tuple[Tuple[float, float, float, float], float, float]]:
+        """예측 위치 주변부터 ROI를 단계적으로 넓히며 앵커 패치를 찾는다.
+
+        매 프레임 화면 전체를 훑지 않고 small → medium → large 순서로만 넓히며, 어느
+        단계에서든 재획득 기준을 넘는 매칭이 나오면 거기서 멈춘다. 전체 프레임 재탐색은
+        이 단계가 모두 실패했을 때만 쓰는 마지막 수단이다(속도와 오검출을 함께 줄인다).
+
+        반환값은 (bbox, 매칭점수, 사용한 반경) 이며, 반경은 어느 단계에서 찾았는지를
+        기록으로 남기기 위한 것이다.
+        """
+        if gray is None or patch is None or center is None:
+            return None
+        diag = max(8.0, float(ref_diag))
+        best = None
+        for scale in self.roi_stage_scales:
+            radius = float(scale) * diag
+            found = self._template_match_candidate(gray, patch, center, radius,
+                                                   subpixel=bool(self.subpixel_refine))
+            if found is None:
+                continue
+            if best is None or found[1] > best[1]:
+                best = (found[0], float(found[1]), radius)
+            if float(found[1]) >= float(self.reacquire_min_score):
+                return found[0], float(found[1]), radius
+        return best
+
     def _reacquire_object(self, obj_id: str, frame: np.ndarray, gray: Optional[np.ndarray],
                           anchor_feat: Optional[Dict[str, Any]],
                           anchor_patch: Optional[np.ndarray],
                           anchor_template: Optional[np.ndarray],
                           anchor_hist: Optional[np.ndarray],
                           anchor_mask: Optional[np.ndarray] = None,
-                          min_sim: Optional[float] = None
+                          min_sim: Optional[float] = None,
+                          search_center: Optional[Tuple[float, float]] = None,
+                          ref_diag: float = 0.0
                           ) -> Optional[Tuple[Tuple[float, float, float, float], float]]:
+        """추적 실패에서 회복한다: 단계적 ROI → 전체 프레임 순서.
+
+        어느 경로로 찾았든 앵커 유사도 게이트를 똑같이 통과해야 하므로, ROI 를 좁게
+        잡았다고 해서 검증이 느슨해지지는 않는다.
+        """
+        gate = self.get_anchor_gate() if min_sim is None else float(min_sim)
+        stage = "full"
+        found = None
+        if search_center is not None and ref_diag > 0.0:
+            staged = self._staged_local_search(gray, anchor_patch, search_center, ref_diag)
+            if staged is not None:
+                _sbbox, _sscore, _sradius = staged
+                _ssim = self._anchor_similarity(frame, _sbbox, anchor_template,
+                                                anchor_hist, anchor_mask)
+                if _ssim >= gate and (_sscore >= float(self.reacquire_min_score)
+                                      or _ssim >= gate * 1.4):
+                    logger.info(f"[{obj_id}] 반경 {_sradius:.0f}px ROI 재탐색으로 원래 물체를 "
+                                f"다시 찾았습니다 (일치도 {_sscore:.2f}, 앵커 유사도 {_ssim:.2f}).")
+                    return _sbbox, float(max(_sscore, _ssim))
         found = self._global_search(gray, frame, anchor_feat, anchor_patch)
         if found is None:
             return None
         bbox, match_score = found
-        gate = self.get_anchor_gate() if min_sim is None else float(min_sim)
         sim = self._anchor_similarity(frame, bbox, anchor_template, anchor_hist, anchor_mask)
         if sim < gate:
             return None
@@ -7507,11 +8126,17 @@ class VideoProcessor:
         sentinel = object()
         error_box: List[BaseException] = []
         budget_bytes = int(self.prefetch_budget_mb) * 1024 * 1024
+                                                                                     
+                                                                                     
+                                                                                     
+        stop = _threading.Event()
 
         def _worker():
             try:
                 sized = False
                 for item in source:
+                    if stop.is_set():
+                        break
                     if not sized:
                                                                                      
                         frame_bytes = int(getattr(item[1], "nbytes", 0) or 0)
@@ -7520,11 +8145,30 @@ class VideoProcessor:
                                                 max(2, int(self.prefetch_frames))))
                             buf.maxsize = depth
                         sized = True
-                    buf.put(item)
+                                                                                     
+                                                                                     
+                    while not stop.is_set():
+                        try:
+                            buf.put(item, timeout=0.2)
+                            break
+                        except _queue.Full:
+                            continue
+                    if stop.is_set():
+                        break
             except BaseException as exc:                     
                 error_box.append(exc)
             finally:
-                buf.put(sentinel)
+                                                                                     
+                try:
+                    close = getattr(source, "close", None)
+                    if callable(close):
+                        close()
+                except Exception:
+                    pass
+                try:
+                    buf.put(sentinel, timeout=1.0)
+                except Exception:
+                    pass
 
         thread = _threading.Thread(target=_worker, daemon=True)
         thread.start()
@@ -7537,13 +8181,20 @@ class VideoProcessor:
             if error_box:
                 raise error_box[0]
         finally:
-            try:
-                while True:
-                    left = buf.get_nowait()
-                    if left is sentinel:
+                                                                                     
+                                                                                     
+            stop.set()
+            _deadline = time.perf_counter() + 3.0
+            while time.perf_counter() < _deadline:
+                try:
+                    left = buf.get(timeout=0.2)
+                except Exception:
+                    if not thread.is_alive():
                         break
-            except Exception:
-                pass
+                    continue
+                if left is sentinel:
+                    break
+            thread.join(timeout=2.0)
 
     def _associate_detections_to_objects(
         self,
@@ -7691,6 +8342,17 @@ class VideoProcessor:
         obj_thickness: Dict[str, float] = {}
         cork_center: Dict[str, Tuple[float, float]] = {}
         seed_box_size: Dict[str, Tuple[float, float]] = {}
+                                                                                     
+                                                                                     
+        row_source: Dict[str, str] = {}
+                                                                                     
+                                                                                     
+        last_center_seen: Dict[str, Tuple[float, float]] = {}
+        last_velocity_seen: Dict[str, Tuple[float, float]] = {}
+        predicted_run: Dict[str, int] = {}
+        center_method_used: Dict[str, str] = {}
+        center_conf_map: Dict[str, float] = {}
+        center_method_counts: Dict[str, int] = {}
 
         try:
             for idx, frame in frame_stream:
@@ -7786,12 +8448,26 @@ class VideoProcessor:
                                     and (idx % max(1, int(self.reacquire_interval)) == 0)):
                                 _regain_thresh = self.get_drift_threshold(anchor_baseline.get(obj_id))
                                 regain = None
+                                                                                     
+                                                                                     
+                                _hist0 = recent_centers.get(obj_id) or []
+                                _phys0 = self._physics_predict(_hist0, 1.0)
+                                if _phys0 is not None:
+                                    _sc0 = (_phys0["x_pred"], _phys0["y_pred"])
+                                elif _hist0:
+                                    _sc0 = _hist0[-1]
+                                else:
+                                    _kx0 = float(objects[obj_id].kalman.x[0, 0])
+                                    _ky0 = float(objects[obj_id].kalman.x[1, 0])
+                                    _sc0 = (_kx0, _ky0) if (np.isfinite(_kx0) and np.isfinite(_ky0)) else None
+                                _rw0, _rh0 = last_size.get(obj_id, (24.0, 24.0))
+                                _rdiag0 = float(np.hypot(_rw0, _rh0))
                                 _bank_list = (anchor_bank.get(obj_id) or []) if self.use_multi_anchor else []
                                 for _be in _bank_list:
                                     regain = self._reacquire_object(
                                         obj_id, frame, gray, _be.get("feat"), _be.get("patch"),
                                         _be.get("template"), _be.get("hist"), _be.get("mask"),
-                                        _regain_thresh)
+                                        _regain_thresh, _sc0, _rdiag0)
                                     if regain is not None:
                                         break
                                 if regain is None:
@@ -7801,7 +8477,20 @@ class VideoProcessor:
                                                                     anchor_templates.get(obj_id),
                                                                     anchor_hists.get(obj_id),
                                                                     anchor_masks.get(obj_id),
-                                                                    _regain_thresh)
+                                                                    _regain_thresh, _sc0, _rdiag0)
+                                                                                     
+                                                                                     
+                                if regain is not None:
+                                    _last_seen = last_center_seen.get(obj_id)
+                                    _last_v = last_velocity_seen.get(obj_id)
+                                    _ok, _why = self._recovery_plausible(
+                                        regain[0], _last_seen, _last_v,
+                                        lost_counts.get(obj_id, 1), _rdiag0, proc_scale)
+                                    if not _ok:
+                                        logger.warning(
+                                            f"[{obj_id}] 프레임 {idx}: 재획득 후보를 거부했습니다 — "
+                                            f"{_why}. 좌표를 지어내지 않고 비워 둡니다.")
+                                        regain = None
                                 if regain is not None:
                                     gx, gy, gw, gh = regain[0]
                                     ref_w0, ref_h0 = last_size.get(obj_id, (gw, gh))
@@ -7953,7 +8642,20 @@ class VideoProcessor:
                     gate = max(8.0, gate * jump_limit)
                     hard_gate = max(gate, max_jump_proc * blur_relax) if not self.strict_jump \
                         else gate
-                    appearance_floor = 0.30
+                                                                                     
+                                                                                    
+                    _appearance_gate = self.get_appearance_threshold()
+                    appearance_floor = 0.30 * (
+                        float(self.get_damage_prior().get("appearance_relax", 1.0))
+                        if self.is_shuttlecock_mode() else 1.0)
+                                                                                     
+                                                                                     
+                                                                                     
+                                                                                     
+                                                                                     
+                    _size_diag = float(np.hypot(ref_w, ref_h))
+                    if profile_opts.get("small_object", False) and _size_diag < 32.0:
+                        appearance_floor *= float(np.clip(_size_diag / 32.0, 0.35, 1.0))
 
                     oscillatory = bool(profile_opts.get("oscillatory", False))
 
@@ -8067,7 +8769,7 @@ class VideoProcessor:
 
                     if not success:
                         frame_warnings.append(self.WARNING_TEMP_FAIL)
-                    if best["appearance"] < self.appearance_threshold:
+                    if best["appearance"] < _appearance_gate:
                         frame_warnings.append(self.WARNING_APPEARANCE)
                     if best["appearance"] < 0.55:
                         frame_warnings.append(self.WARNING_LOW_CONFIDENCE)
@@ -8151,19 +8853,35 @@ class VideoProcessor:
                                 (drift_counts[obj_id] - max(1, int(self.reacquire_after)))
                                 % max(1, int(self.reacquire_interval)) == 0):
                             found = None
+                                                                                     
+                            _phys1 = self._physics_predict(history, 1.0)
+                            _sc1 = (_phys1["x_pred"], _phys1["y_pred"]) if _phys1 is not None else (
+                                history[-1] if history else None)
+                            _rdiag1 = float(np.hypot(ref_w, ref_h))
                             _cands_bank = (anchor_bank.get(obj_id) or []) if self.use_multi_anchor else []
                             if len(_cands_bank) > 1:
                                 for _be in _cands_bank:
                                     found = self._reacquire_object(
                                         obj_id, frame, gray, _be.get("feat"), _be.get("patch"),
                                         _be.get("template"), _be.get("hist"), _be.get("mask"),
-                                        drift_thresh)
+                                        drift_thresh, _sc1, _rdiag1)
                                     if found is not None:
                                         break
                             if found is None:
                                 found = self._reacquire_object(obj_id, frame, gray, anchor_feat,
                                                                anchor_patches.get(obj_id), anchor,
-                                                               anchor_hist, anchor_mask, drift_thresh)
+                                                               anchor_hist, anchor_mask, drift_thresh,
+                                                               _sc1, _rdiag1)
+                            if found is not None:
+                                                                                     
+                                _ok, _why = self._recovery_plausible(
+                                    found[0], history[-1] if history else None,
+                                    (_dxh, _dyh) if history else None,
+                                    max(1, drift_counts.get(obj_id, 1)), _rdiag1, proc_scale)
+                                if not _ok:
+                                    logger.warning(
+                                        f"[{obj_id}] 프레임 {idx}: 드리프트 재획득 후보를 거부했습니다 — {_why}")
+                                    found = None
                             if found is not None:
                                 rbbox, rscore = found
                                 rx, ry, rw, rh = rbbox
@@ -8314,12 +9032,49 @@ class VideoProcessor:
                     if drift_detected:
                         appearance_scores[obj_id] = min(appearance_scores[obj_id], 0.20)
                     tracking_scores[obj_id] = float(best["score"])
+                                                                                     
+                                                                                     
+                                                                                     
+                    _src_tag = best.get("source", "")
+                    if _src_tag == "reacquire" or self.WARNING_RECOVERED in frame_warnings:
+                        row_source[obj_id] = self.SOURCE_RECOVERED
+                        predicted_run[obj_id] = 0
+                    elif _src_tag in ("kalman", "motion", "physics_prediction", "optical_flow"):
+                        row_source[obj_id] = self.SOURCE_PREDICTED
+                        predicted_run[obj_id] = predicted_run.get(obj_id, 0) + 1
+                    else:
+                        row_source[obj_id] = self.SOURCE_DETECTED
+                        predicted_run[obj_id] = 0
+                                                                                     
+                                                                                     
+                                                                                    
+                    if (row_source[obj_id] == self.SOURCE_PREDICTED
+                            and predicted_run[obj_id] > max(0, int(self.max_predicted_run))):
+                        if predicted_run[obj_id] == max(0, int(self.max_predicted_run)) + 1:
+                            logger.warning(
+                                f"[{obj_id}] 프레임 {idx}: 실제 검출 없이 예측으로만 "
+                                f"{int(self.max_predicted_run)}프레임을 이었습니다 — 이후 프레임은 "
+                                f"기록하지 않고 LOST 로 둡니다(예측값을 관측값처럼 남기지 않기 위해서).")
+                        tracker_success.pop(obj_id, None)
+                        lost_counts[obj_id] = lost_counts.get(obj_id, 0) + 1
+                        drift_blocked[obj_id] = True
+                        appearance_scores[obj_id] = 0.0
+                        tracking_scores[obj_id] = 0.0
+                        frame_warning_map[obj_id] = " / ".join(
+                            dict.fromkeys(list(frame_warnings) + [self.WARNING_TEMP_FAIL]))
+                        continue
                     if frame_warnings:
                         warning_counts[obj_id] = warning_counts.get(obj_id, 0) + 1
                     frame_warning_map[obj_id] = " / ".join(dict.fromkeys(frame_warnings))
                     score = best["appearance"]
 
                     history.append((bcx, bcy))
+                                                                                     
+                                                                                     
+                    if row_source.get(obj_id) != self.SOURCE_PREDICTED:
+                        last_center_seen[obj_id] = (bcx, bcy)
+                        _vdx, _vdy, _ = self._recent_motion(history)
+                        last_velocity_seen[obj_id] = (_vdx, _vdy)
                     if len(history) > 12:
                         history.pop(0)
                     if len(history) == 12:
@@ -8368,7 +9123,7 @@ class VideoProcessor:
                         or best.get("reference_conflict", False)
                         or best.get("source") == "reacquire"
                         or best["score"] < accept_score
-                        or best["appearance"] < self.appearance_threshold)
+                        or best["appearance"] < _appearance_gate)
                     if (current is not None and not _template_update_blocked
                             and anchor_sim >= float(self.anchor_refresh_min)):
                         prev = templates.get(obj_id)
@@ -8526,22 +9281,54 @@ class VideoProcessor:
                                                                                         
                                                                         
                             _miss = center_lock_miss.get(obj_id, 0)
-                            _period = 1 if _miss < 5 else (3 if _miss < 15 else 6)
+                                                                                     
+                                                                                     
+                                                                                     
+                            _shuttle = self.is_shuttlecock_mode()
+                            _period = 1 if (_shuttle or _miss < 5) else (3 if _miss < 15 else 6)
                             if idx % _period == 0:
-                                locked = self._center_on_object(
+                                                                                     
+                                                                                
+                                locked = self._estimate_center(
                                     frame_full,
-                                    (out_cx - out_w / 2.0, out_cy - out_h / 2.0, out_w, out_h))
+                                    (out_cx - out_w / 2.0, out_cy - out_h / 2.0, out_w, out_h),
+                                    apply_min_shift=not _shuttle)
                                 if locked is not None:
-                                    out_cx, out_cy = locked
+                                    out_cx, out_cy = float(locked["cx"]), float(locked["cy"])
                                     centered_counts[obj_id] = centered_counts.get(obj_id, 0) + 1
                                     center_lock_miss[obj_id] = 0
+                                    center_method_used[obj_id] = str(locked["method"]) + (
+                                        "(fallback)" if locked.get("fallback") else "")
+                                    center_conf_map[obj_id] = float(locked["confidence"])
+                                    _cm_key = str(locked["method"]) + ("(fallback)"
+                                                                        if locked.get("fallback")
+                                                                        else "")
+                                    center_method_counts[_cm_key] = \
+                                        center_method_counts.get(_cm_key, 0) + 1
+                                                                                     
+                                                                                     
+                                    conf_value = float(np.clip(
+                                        conf_value * (0.7 + 0.3 * float(locked["confidence"])),
+                                        0.0, 1.0))
                                 else:
+                                                                                     
+                                                                                     
                                     center_lock_miss[obj_id] = _miss + 1
+                                    center_method_used[obj_id] = "bbox(fallback)"
+                                    center_conf_map[obj_id] = 0.4 * float(
+                                        center_conf_map.get(obj_id, 0.5))
+                                    center_method_counts["bbox(fallback)"] = \
+                                        center_method_counts.get("bbox(fallback)", 0) + 1
                         cork_center[obj_id] = (cx, cy)
+                        _src = row_source.get(obj_id, VideoProcessor.SOURCE_DETECTED)
                         pending_rows[obj_id].append([idx, t, out_cx, out_cy,
                                                      out_w, out_h, conf_value, False,
                                                      float(tracking_scores.get(obj_id, 1.0)),
-                                                     frame_warning_map.get(obj_id, "")])
+                                                     frame_warning_map.get(obj_id, ""),
+                                                     _src,
+                                                     VideoProcessor.status_from_confidence(conf_value, _src),
+                                                     center_method_used.get(obj_id, self.get_center_method()),
+                                                     float(center_conf_map.get(obj_id, np.nan))])
 
                     elif obj_id in assigned:
                         x1, y1, x2, y2, conf = assigned[obj_id]
@@ -8568,7 +9355,11 @@ class VideoProcessor:
                             pending_rows[obj_id].append([idx, t, cx * inv_scale, cy * inv_scale,
                                                          w * inv_scale, h * inv_scale, conf, True,
                                                          float(tracking_scores.get(obj_id, 1.0)),
-                                                         frame_warning_map.get(obj_id, "")])
+                                                         frame_warning_map.get(obj_id, ""),
+                                                         VideoProcessor.SOURCE_DETECTED,
+                                                         VideoProcessor.status_from_confidence(
+                                                             conf, VideoProcessor.SOURCE_DETECTED),
+                                                         "bbox", float('nan')])
                         else:
                             trackers[obj_id].init(frame, (int(x1), int(y1), int(w), int(h)))
                             obj.kalman.update(cx, cy)
@@ -8578,7 +9369,11 @@ class VideoProcessor:
                             pending_rows[obj_id].append([idx, t, cx * inv_scale, cy * inv_scale,
                                                          w * inv_scale, h * inv_scale, conf, False,
                                                          float(tracking_scores.get(obj_id, 1.0)),
-                                                         frame_warning_map.get(obj_id, "")])
+                                                         frame_warning_map.get(obj_id, ""),
+                                                         VideoProcessor.SOURCE_DETECTED,
+                                                         VideoProcessor.status_from_confidence(
+                                                             conf, VideoProcessor.SOURCE_DETECTED),
+                                                         "bbox", float('nan')])
 
                     elif obj_id in trackers:
                                                 
@@ -8594,9 +9389,23 @@ class VideoProcessor:
                             continue
                         last_w, last_h = last_size.get(obj_id, (30.0, 30.0))
                         kx, ky = obj.kalman.predict()
+                                                                                     
+                                                                                     
+                                                                                     
+                        predicted_run[obj_id] = predicted_run.get(obj_id, 0) + 1
+                        if predicted_run[obj_id] > max(0, int(self.max_predicted_run)):
+                            if predicted_run[obj_id] == max(0, int(self.max_predicted_run)) + 1:
+                                logger.warning(
+                                    f"[{obj_id}] 프레임 {idx}: 검출 없이 예측만으로 "
+                                    f"{int(self.max_predicted_run)}프레임을 이었습니다 — 여기서부터는 "
+                                    f"기록하지 않고 LOST 로 둡니다.")
+                            continue
                         pending_rows[obj_id].append([idx, t, kx * inv_scale, ky * inv_scale,
                                                      last_w * inv_scale, last_h * inv_scale, 0.2, False,
-                                                     0.0, VideoProcessor.WARNING_TEMP_FAIL])
+                                                     0.0, VideoProcessor.WARNING_TEMP_FAIL,
+                                                     VideoProcessor.SOURCE_PREDICTED,
+                                                     VideoProcessor.STATUS_LOW,
+                                                     "bbox", float('nan')])
                                                      
                                                      
                                                                                         
@@ -8768,11 +9577,15 @@ class VideoProcessor:
                 if not rows:
                     continue
                 new_df = pd.DataFrame(rows, columns=['frame', 't', 'x_px', 'y_px', 'w', 'h', 'conf', 'keyframe',
-                                                     'tracking_score', 'tracking_warning'])
+                                                     'tracking_score', 'tracking_warning',
+                                                     'source', 'tracking_status',
+                                                     'center_method', 'center_confidence'])
                                                                                      
                 new_df['raw_x_px'] = new_df['x_px'].to_numpy(dtype=float)
                 new_df['raw_y_px'] = new_df['y_px'].to_numpy(dtype=float)
-                new_df['tracking_source'] = "tracker"
+                                                                                     
+                                                                                     
+                new_df['tracking_source'] = new_df['source'].astype(str)
                 new_df['manual_corrected'] = False
                 new_df['interpolated'] = False
                 new_df['smoothed'] = False
@@ -8794,7 +9607,9 @@ class VideoProcessor:
                 new_df['prediction_conflict'] = np.array(
                     [bool(_pred_map.get(int(f), {}).get('prediction_conflict', False))
                      for f in _frames_arr], dtype=bool)
-                strength = float(np.clip(self.smooth_strength, 0.0, 1.0))
+                                                                                     
+                                                                                     
+                strength = 0.0 if self.raw_tracking_only else float(np.clip(self.smooth_strength, 0.0, 1.0))
                 if strength > 1e-6 and len(new_df) >= 7:
                     win = int(np.clip(round(3 + strength * 8), 3, min(15, len(new_df) if len(new_df) % 2 == 1 else len(new_df) - 1)))
                     if win % 2 == 0:
@@ -8830,6 +9645,7 @@ class VideoProcessor:
                     merged = pd.concat([obj.trajectory, new_df], ignore_index=True)
                     obj.trajectory = merged.drop_duplicates(subset='frame', keep='last').sort_values('frame').reset_index(drop=True)
             _recorded_counts = {oid: len(rows) for oid, rows in pending_rows.items()}
+            _pending_rows_snapshot = {oid: list(rows) for oid, rows in pending_rows.items()}
             pending_rows.clear()
 
             for obj_id, rows in pending_skirt_rows.items():
@@ -8871,7 +9687,29 @@ class VideoProcessor:
                     for oid, parts in conf_parts.items()
                 },
                 "objects": {oid: int(v) for oid, v in _recorded_counts.items()},
+                                                                                     
+                "center_method": self.get_center_method(),
+                "center_method_counts": dict(center_method_counts),
+                "damage_condition": str(self.damage_condition),
+                "predicted_rows": {oid: int(sum(1 for r in rows
+                                                if len(r) > 10 and r[10] == VideoProcessor.SOURCE_PREDICTED))
+                                   for oid, rows in _pending_rows_snapshot.items()},
+                "raw_tracking_only": bool(self.raw_tracking_only),
             }
+            _cm_total = int(sum(center_method_counts.values()))
+            _cm_fallback = int(sum(v for k, v in center_method_counts.items()
+                                   if k.endswith("(fallback)")))
+            self.last_center_stats = {"method": self.get_center_method(),
+                                      "counts": dict(center_method_counts),
+                                      "frames": _cm_total, "fallback_frames": _cm_fallback}
+            if _cm_total and _cm_fallback:
+                                                                                     
+                                                                                     
+                logger.warning(
+                    f"중심 정의 '{self.get_center_method()}' 를 {_cm_total - _cm_fallback}/"
+                    f"{_cm_total} 프레임에 적용했습니다. 나머지 {_cm_fallback}프레임은 물체 분리에 "
+                    f"실패해 추적 상자 중심을 대신 썼고, center_method 열에 '(fallback)' 으로 "
+                    f"표시했습니다 — 그 프레임의 중심 정의는 나머지와 다릅니다.")
             trackers.clear()
             templates.clear()
             lost_counts.clear()
@@ -8959,6 +9797,343 @@ class VideoProcessor:
         finally:
             cap.release()
             out.release()
+
+
+
+class ShuttlecockTrajectoryValidator:
+    """AI 추적 궤적을 기준 궤적과 비교해 '연구에 써도 되는가'를 수치로 답한다.
+
+    추적이 잘 됐다고 주장하는 것과 그것을 보이는 것은 다르다. 이 클래스는 두 가지를
+    각각 계산한다.
+
+      1) 위치·속도 오차   — 프레임마다 얼마나 어긋났는가 (MAE, RMSE, 최대 오차)
+      2) 물리량 오차      — 그 궤적으로 계산한 물리량이 얼마나 달라지는가
+
+    2번이 있는 이유는, 최종 목적이 좌표가 아니라 물리 분석이기 때문이다. 위치 오차가
+    작아도 그것이 속도·항력 계수까지 작은 오차로 이어지는지는 따로 확인해야 한다.
+    반대로 위치 오차가 조금 있어도 물리량이 흔들리지 않으면 그 데이터는 쓸 수 있다.
+
+    기준 궤적(reference)은 사람의 수동 annotation, 다른 추적기 결과, 또는 합성 영상의
+    정답 궤적 중 무엇이든 될 수 있다. 이 클래스는 기준이 어디서 왔는지 묻지 않는다.
+    """
+
+                                                                                  
+                                                                                  
+    DEFAULT_DIAMETER_M = 0.066
+    DEFAULT_MASS_KG = 0.005
+    RHO_AIR = 1.20
+
+    REF_COLUMN_ALIASES = {
+        'frame': ('frame', 'Frame', 'frame_idx', '프레임', 'f'),
+        'x': ('x_px', 'x', 'X', 'x_ref', 'ref_x', 'x_pixel'),
+        'y': ('y_px', 'y', 'Y', 'y_ref', 'ref_y', 'y_pixel'),
+    }
+
+    @classmethod
+    def normalize_reference(cls, df: pd.DataFrame) -> pd.DataFrame:
+        """기준 궤적 표에서 frame / x / y 열을 찾아 표준 이름으로 바꾼다.
+
+        사람이 만든 기준 파일은 열 이름이 제각각이므로 흔한 이름들을 받아준다.
+        찾지 못하면 조용히 넘기지 않고 예외를 던진다 — 잘못된 열로 비교하면 오차가
+        의미를 잃기 때문이다.
+        """
+        if df is None or df.empty:
+            raise ValueError("기준 궤적이 비어 있습니다.")
+        picked = {}
+        lower = {str(c).strip().lower(): c for c in df.columns}
+        for key, names in cls.REF_COLUMN_ALIASES.items():
+            for n in names:
+                if str(n).lower() in lower:
+                    picked[key] = lower[str(n).lower()]
+                    break
+        missing = [k for k in ('frame', 'x', 'y') if k not in picked]
+        if missing:
+            raise ValueError(f"기준 궤적에서 {', '.join(missing)} 열을 찾지 못했습니다 "
+                             f"(현재 열: {list(df.columns)[:12]}).")
+        out = pd.DataFrame({
+            'frame': pd.to_numeric(df[picked['frame']], errors='coerce'),
+            'x_ref': pd.to_numeric(df[picked['x']], errors='coerce'),
+            'y_ref': pd.to_numeric(df[picked['y']], errors='coerce'),
+        }).dropna(subset=['frame'])
+        out['frame'] = out['frame'].astype(int)
+        return out.drop_duplicates(subset='frame', keep='last').sort_values('frame').reset_index(drop=True)
+
+    @staticmethod
+    def align(ai_df: pd.DataFrame, ref_df: pd.DataFrame) -> pd.DataFrame:
+        """같은 프레임 번호끼리만 붙인다(보간해서 억지로 맞추지 않는다)."""
+        ai = pd.DataFrame({
+            'frame': pd.to_numeric(ai_df['frame'], errors='coerce'),
+            'x_ai': pd.to_numeric(ai_df.get('x_px'), errors='coerce'),
+            'y_ai': pd.to_numeric(ai_df.get('y_px'), errors='coerce'),
+        }).dropna(subset=['frame'])
+        ai['frame'] = ai['frame'].astype(int)
+        for col, default in (('conf', np.nan), ('source', ''), ('tracking_status', '')):
+            ai[col] = ai_df[col].to_numpy() if col in ai_df.columns else default
+        return ai.merge(ref_df, on='frame', how='inner')
+
+    @staticmethod
+    def position_errors(aligned: pd.DataFrame, scale_m_px: float = 1.0) -> Dict[str, float]:
+        """프레임별 위치 오차 e_i = sqrt((x_ai-x_ref)^2 + (y_ai-y_ref)^2) 의 요약."""
+        if aligned.empty:
+            return {}
+        e = np.hypot(aligned['x_ai'].to_numpy(dtype=float) - aligned['x_ref'].to_numpy(dtype=float),
+                     aligned['y_ai'].to_numpy(dtype=float) - aligned['y_ref'].to_numpy(dtype=float))
+        finite = e[np.isfinite(e)]
+        if finite.size == 0:
+            return {}
+        scale = float(scale_m_px) if np.isfinite(scale_m_px) and scale_m_px > 0 else 1.0
+        return {
+            'compared_frames': int(finite.size),
+            'mae_px': float(np.mean(finite)),
+            'rmse_px': float(np.sqrt(np.mean(finite ** 2))),
+            'median_px': float(np.median(finite)),
+            'p95_px': float(np.percentile(finite, 95)),
+            'max_px': float(np.max(finite)),
+            'mae_m': float(np.mean(finite) * scale),
+            'rmse_m': float(np.sqrt(np.mean(finite ** 2)) * scale),
+            'max_m': float(np.max(finite) * scale),
+        }
+
+    @staticmethod
+    def velocity_errors(aligned: pd.DataFrame, fps: float, scale_m_px: float = 1.0) -> Dict[str, float]:
+        """중앙차분 속도끼리 비교한다.
+
+        속도는 위치의 차분이라 위치 오차를 증폭한다. 그래서 위치 오차만 보고 넘어가면
+        물리 분석에서 드러날 문제를 놓친다.
+        """
+        if len(aligned) < 3:
+            return {}
+        f = aligned['frame'].to_numpy(dtype=float)
+        dt = np.gradient(f) / max(1e-9, float(fps))
+        scale = float(scale_m_px) if np.isfinite(scale_m_px) and scale_m_px > 0 else 1.0
+        vx_ai = np.gradient(aligned['x_ai'].to_numpy(dtype=float)) / dt * scale
+        vy_ai = np.gradient(aligned['y_ai'].to_numpy(dtype=float)) / dt * scale
+        vx_rf = np.gradient(aligned['x_ref'].to_numpy(dtype=float)) / dt * scale
+        vy_rf = np.gradient(aligned['y_ref'].to_numpy(dtype=float)) / dt * scale
+        ev = np.hypot(vx_ai - vx_rf, vy_ai - vy_rf)
+        sp_rf = np.hypot(vx_rf, vy_rf)
+        finite = np.isfinite(ev) & np.isfinite(sp_rf)
+        if not np.any(finite):
+            return {}
+        ref_mean = float(np.mean(sp_rf[finite]))
+        return {
+            'v_mae': float(np.mean(ev[finite])),
+            'v_rmse': float(np.sqrt(np.mean(ev[finite] ** 2))),
+            'v_max': float(np.max(ev[finite])),
+            'v_ref_mean': ref_mean,
+            'v_mae_rel_pct': float(np.mean(ev[finite]) / ref_mean * 100.0) if ref_mean > 1e-9 else float('nan'),
+        }
+
+    @staticmethod
+    def tracking_metrics(ai_df: pd.DataFrame, ref_df: pd.DataFrame) -> Dict[str, float]:
+        """추적 성공률·손실률·회복률. 예측으로 채운 프레임은 성공으로 세지 않는다."""
+        ref_frames = set(int(v) for v in ref_df['frame'].tolist())
+        if not ref_frames:
+            return {}
+        ai = ai_df.copy()
+        ai['frame'] = pd.to_numeric(ai['frame'], errors='coerce')
+        ai = ai.dropna(subset=['frame'])
+        ai['frame'] = ai['frame'].astype(int)
+        ai = ai[ai['frame'].isin(ref_frames)]
+        x = pd.to_numeric(ai.get('x_px'), errors='coerce')
+        has_pos = x.notna().to_numpy() if len(ai) else np.zeros(0, dtype=bool)
+        src = ai['source'].astype(str).to_numpy() if 'source' in ai.columns \
+            else np.full(len(ai), VideoProcessor.SOURCE_DETECTED)
+        observed = has_pos & (src != VideoProcessor.SOURCE_PREDICTED)
+        total = len(ref_frames)
+        recovered = int(np.count_nonzero(src == VideoProcessor.SOURCE_RECOVERED))
+                                                                                  
+        lost_frames = total - int(np.count_nonzero(has_pos))
+                                                                                     
+                                                                                     
+        gaps = 0
+        if len(ai):
+            flags = has_pos.astype(int)
+            gaps = int(np.count_nonzero((flags[1:] == 0) & (flags[:-1] == 1)))
+        return {
+            'reference_frames': int(total),
+            'tracked_frames': int(np.count_nonzero(has_pos)),
+            'observed_frames': int(np.count_nonzero(observed)),
+            'predicted_frames': int(np.count_nonzero(src == VideoProcessor.SOURCE_PREDICTED)),
+            'recovered_frames': recovered,
+            'lost_frames': int(lost_frames),
+            'success_rate_pct': float(np.count_nonzero(observed) / total * 100.0),
+            'coverage_pct': float(np.count_nonzero(has_pos) / total * 100.0),
+            'lost_ratio_pct': float(lost_frames / total * 100.0),
+            'track_breaks': gaps,
+            'recovery_success_pct': float(recovered / gaps * 100.0) if gaps else float('nan'),
+        }
+
+    @staticmethod
+    def physics_quantities(frames: np.ndarray, x_px: np.ndarray, y_px: np.ndarray,
+                           fps: float, scale_m_px: float = 1.0,
+                           mass_kg: Optional[float] = None,
+                           diameter_m: Optional[float] = None) -> Dict[str, float]:
+        """궤적 하나에서 연구에 쓰는 물리량을 뽑는다.
+
+        y 는 화면 좌표(아래로 증가)이므로 위쪽을 양으로 뒤집어 계산한다. 픽셀 눈금이
+        보정되지 않았으면(scale_m_px == 1) 길이 단위는 픽셀이며, 그 경우 C_D 처럼 절대
+        단위가 필요한 값은 계산하지 않는다 — 단위 없는 숫자를 물리량이라고 부르지 않는다.
+
+        C_D 와 beta 는 항력이 지배하는 구간의 속력 감소에서 얻는다. 항력만 있는 직선
+        운동에서 v(t) = v0 / (1 + v0 t / ell) 이고, ell = 2m / (rho S C_D) 이므로
+        1/v 를 t 로 회귀하면 기울기가 1/ell 이 된다. beta 는 그 역수 1/ell [1/m] 로,
+        단위 길이당 운동량이 얼마나 깎이는지를 뜻한다. speed_decay 는 이와 별개로
+        ln v 를 t 로 회귀한 지수 감쇠율 [1/s] 이다.
+        """
+        f = np.asarray(frames, dtype=float)
+        x = np.asarray(x_px, dtype=float)
+        y = np.asarray(y_px, dtype=float)
+        good = np.isfinite(f) & np.isfinite(x) & np.isfinite(y)
+        if int(np.count_nonzero(good)) < 5:
+            return {}
+        f, x, y = f[good], x[good], y[good]
+        order = np.argsort(f)
+        f, x, y = f[order], x[order], y[order]
+        scale = float(scale_m_px) if np.isfinite(scale_m_px) and scale_m_px > 0 else 1.0
+        calibrated = abs(scale - 1.0) > 1e-9
+        t = (f - f[0]) / max(1e-9, float(fps))
+        X = (x - x[0]) * scale
+        Y = -(y - y[0]) * scale
+
+        dt = np.gradient(t)
+        vx = np.gradient(X) / dt
+        vy = np.gradient(Y) / dt
+        speed = np.hypot(vx, vy)
+        n0 = min(5, max(2, len(speed) // 8))
+        out: Dict[str, float] = {
+            'v0': float(np.median(speed[:n0])),
+            'flight_time': float(t[-1] - t[0]),
+            'range': float(np.max(X) - np.min(X)),
+            'max_height': float(np.max(Y)),
+            'mean_speed': float(np.mean(speed[np.isfinite(speed)])),
+        }
+                                                        
+        finite = np.isfinite(speed) & (speed > 1e-6) & np.isfinite(t)
+        if int(np.count_nonzero(finite)) >= 5:
+            slope = ShuttlecockTrajectoryValidator._robust_slope(t[finite], np.log(speed[finite]))
+            out['speed_decay'] = float(-slope) if np.isfinite(slope) else float('nan')
+                                                                        
+            inv_slope = ShuttlecockTrajectoryValidator._robust_slope(t[finite], 1.0 / speed[finite])
+                                                                              
+            if np.isfinite(inv_slope) and inv_slope > 1e-12:
+                out['beta'] = float(inv_slope)
+                if calibrated:
+                    m = float(mass_kg if mass_kg else ShuttlecockTrajectoryValidator.DEFAULT_MASS_KG)
+                    d = float(diameter_m if diameter_m
+                              else ShuttlecockTrajectoryValidator.DEFAULT_DIAMETER_M)
+                    area = np.pi * (d / 2.0) ** 2
+                    ell = 1.0 / inv_slope
+                    out['aero_length_m'] = float(ell)
+                    out['C_D'] = float(2.0 * m / (ShuttlecockTrajectoryValidator.RHO_AIR
+                                                  * area * ell))
+        out['_calibrated'] = 1.0 if calibrated else 0.0
+        return out
+
+    @staticmethod
+    def _robust_slope(x: np.ndarray, y: np.ndarray, n_iter: int = 2,
+                      n_sigma: float = 3.0) -> float:
+        """이상치에 덜 흔들리는 1차 회귀 기울기.
+
+        속력 감쇠율과 항력 계수는 속도의 회귀에서 나오는데, 속도는 위치의 차분이라
+        한두 프레임의 오차가 그대로 증폭된다. 회복 직후나 예측으로 채운 프레임이 하나만
+        섞여도 기울기가 눈에 띄게 달라진다. 그래서 한 번 맞춘 뒤 잔차가 큰 점을 빼고 다시
+        맞추기를 반복한다. 이 처리는 AI 궤적과 기준 궤적에 똑같이 적용되므로 비교의
+        공정성은 유지된다.
+
+        이것은 원본 데이터를 고치는 것이 아니라 요약 통계를 구하는 방법이다 — 궤적 자체는
+        그대로 남는다.
+        """
+        xa = np.asarray(x, dtype=float)
+        ya = np.asarray(y, dtype=float)
+        good = np.isfinite(xa) & np.isfinite(ya)
+        if int(np.count_nonzero(good)) < 3:
+            return float('nan')
+        xa, ya = xa[good], ya[good]
+        slope = intercept = float('nan')
+        for _ in range(max(1, int(n_iter))):
+            if len(xa) < 3:
+                break
+            try:
+                slope, intercept = np.polyfit(xa, ya, 1)
+            except Exception:
+                return float('nan')
+            resid = ya - (slope * xa + intercept)
+            mad = float(np.median(np.abs(resid - np.median(resid))))
+            if mad <= 1e-12:
+                break
+            keep = np.abs(resid) <= n_sigma * mad * 1.4826
+            if bool(np.all(keep)) or int(np.count_nonzero(keep)) < 3:
+                break
+            xa, ya = xa[keep], ya[keep]
+        return float(slope)
+
+    PHYSICS_LABELS = (
+        ('v0', '초기 속력 v0', 'm/s'),
+        ('flight_time', '비행 시간', 's'),
+        ('range', '수평 도달 거리', 'm'),
+        ('max_height', '최고 높이', 'm'),
+        ('mean_speed', '평균 속력', 'm/s'),
+        ('speed_decay', '속력 감쇠율', '1/s'),
+        ('beta', 'beta = 1/aero length', '1/m'),
+        ('C_D', '항력 계수 C_D', '-'),
+    )
+
+    @classmethod
+    def compare_physics(cls, ai_q: Dict[str, float], ref_q: Dict[str, float]) -> pd.DataFrame:
+        """AI 궤적과 기준 궤적에서 각각 구한 물리량의 상대오차 표."""
+        rows = []
+        unit_note = "" if float(ai_q.get('_calibrated', 0.0)) > 0.5 else " (px 단위 — 눈금 미보정)"
+        for key, label, unit in cls.PHYSICS_LABELS:
+            a, r = ai_q.get(key, np.nan), ref_q.get(key, np.nan)
+            if not (np.isfinite(a) or np.isfinite(r)):
+                continue
+            rel = float(abs(a - r) / abs(r) * 100.0) if (np.isfinite(a) and np.isfinite(r)
+                                                         and abs(r) > 1e-12) else float('nan')
+            shown_unit = unit if unit != 'm' and unit != 'm/s' else unit + unit_note
+            rows.append({'물리량': label, '단위': shown_unit,
+                         'AI': float(a) if np.isfinite(a) else np.nan,
+                         '기준': float(r) if np.isfinite(r) else np.nan,
+                         '절대오차': float(abs(a - r)) if (np.isfinite(a) and np.isfinite(r)) else np.nan,
+                         '상대오차(%)': rel})
+        return pd.DataFrame(rows)
+
+    @classmethod
+    def run(cls, ai_df: pd.DataFrame, ref_df: pd.DataFrame, fps: float,
+            scale_m_px: float = 1.0, mass_kg: Optional[float] = None,
+            diameter_m: Optional[float] = None) -> Dict[str, Any]:
+        """전체 검증을 한 번에 돌리고 표와 수치를 함께 돌려준다."""
+        ref = cls.normalize_reference(ref_df)
+        aligned = cls.align(ai_df, ref)
+        pos = cls.position_errors(aligned, scale_m_px)
+        vel = cls.velocity_errors(aligned, fps, scale_m_px)
+        trk = cls.tracking_metrics(ai_df, ref)
+        ai_q = cls.physics_quantities(aligned['frame'].to_numpy(), aligned['x_ai'].to_numpy(),
+                                      aligned['y_ai'].to_numpy(), fps, scale_m_px,
+                                      mass_kg, diameter_m)
+        ref_q = cls.physics_quantities(aligned['frame'].to_numpy(), aligned['x_ref'].to_numpy(),
+                                       aligned['y_ref'].to_numpy(), fps, scale_m_px,
+                                       mass_kg, diameter_m)
+                                                                                     
+                                                                                     
+                                                                                     
+        observed_table = pd.DataFrame()
+        if 'source' in aligned.columns:
+            est = aligned['source'].astype(str).isin(
+                [VideoProcessor.SOURCE_PREDICTED, VideoProcessor.SOURCE_INTERPOLATED])
+            if bool(est.any()) and int((~est).sum()) >= 8:
+                obs = aligned[~est]
+                ai_obs = cls.physics_quantities(obs['frame'].to_numpy(), obs['x_ai'].to_numpy(),
+                                                obs['y_ai'].to_numpy(), fps, scale_m_px,
+                                                mass_kg, diameter_m)
+                ref_obs = cls.physics_quantities(obs['frame'].to_numpy(), obs['x_ref'].to_numpy(),
+                                                 obs['y_ref'].to_numpy(), fps, scale_m_px,
+                                                 mass_kg, diameter_m)
+                observed_table = cls.compare_physics(ai_obs, ref_obs)
+        return {'aligned': aligned, 'position': pos, 'velocity': vel, 'tracking': trk,
+                'physics_ai': ai_q, 'physics_ref': ref_q,
+                'physics_table': cls.compare_physics(ai_q, ref_q),
+                'physics_table_observed': observed_table}
 
                                                                               
 from typing import Dict
@@ -9559,6 +10734,13 @@ class Controller:
         self.validation_levels: Dict[str, float] = dict(PhysicsValidationEngine.LEVEL_DEFAULTS)
         self.validation_result: pd.DataFrame = pd.DataFrame()
         self.validation_auto: bool = True
+                                                                                     
+                                                                                     
+        self.reference_trajectory: Optional[pd.DataFrame] = None
+        self.reference_label: str = ""
+        self.tracking_validation: Optional[Dict[str, Any]] = None
+                                                                                     
+        self.shuttlecock_diameter_m: float = ShuttlecockTrajectoryValidator.DEFAULT_DIAMETER_M
 
     def set_plot_mode(self, mode: str) -> str:
         self.plot_mode = mode if mode in ("lines", "markers", "lines+markers") else "lines+markers"
@@ -10156,7 +11338,17 @@ class Controller:
                 cv2.rectangle(img, (x1, y1), (x2, y2), box_color, box_thick)
                 if is_selected:
                     cv2.rectangle(img, (x1 - 3, y1 - 3), (x2 + 3, y2 + 3), (255, 255, 255), 1)
-                cv2.circle(img, (int(cx), int(cy)), center_r, box_color, -1)
+                                                                                     
+                                                                                     
+                                                                                  
+                _src_txt = str(row.get('source', '')) if 'source' in row.index else ''
+                _status_txt = str(row.get('tracking_status', '')) if 'tracking_status' in row.index else ''
+                _estimated = _src_txt in (VideoProcessor.SOURCE_PREDICTED,
+                                          VideoProcessor.SOURCE_INTERPOLATED)
+                if _estimated:
+                    cv2.circle(img, (int(cx), int(cy)), center_r + 1, box_color, 2)
+                else:
+                    cv2.circle(img, (int(cx), int(cy)), center_r, box_color, -1)
                 if is_selected:
                     cv2.circle(img, (int(cx), int(cy)), center_r + 3, (255, 255, 255), 2)
                 label = f"[{obj_id}] {obj.name}"
@@ -10168,6 +11360,12 @@ class Controller:
                     self._put_text(img, label, (x1, max(0, y1 - 8)), font_scale, box_color, 2 if is_selected else 1)
                 score_val = float(row['tracking_score']) if 'tracking_score' in row.index and pd.notna(row.get('tracking_score')) else float('nan')
                 info = f"C {row_conf:.2f}" + (f" | S {score_val:.2f}" if np.isfinite(score_val) else "")
+                                                                                     
+                                                                                     
+                if _status_txt and _status_txt != 'nan':
+                    info += f" | {_status_txt}"
+                if _src_txt and _src_txt not in ('nan', VideoProcessor.SOURCE_DETECTED):
+                    info += f" | {_src_txt}"
                 if flags.get("label", True):
                     self._put_text(img, info, (x1, min(img.shape[0] - 4, y2 + 16)),
                                    max(0.42, font_scale - 0.1), box_color, 1)
@@ -10333,6 +11531,13 @@ class Controller:
         if not df.empty and 'frame' in df.columns and frame_idx in df['frame'].values:
             mask = df['frame'] == frame_idx
             df.loc[mask, ['x_px', 'y_px', 'w', 'h', 'conf', 'keyframe']] = [cx, cy, w, h, 1.0, True]
+                                                                              
+            for _col, _val in (('source', VideoProcessor.SOURCE_MANUAL),
+                               ('tracking_status', VideoProcessor.STATUS_HIGH),
+                               ('manual_corrected', True), ('tracking_source', "manual")):
+                if _col not in df.columns:
+                    df[_col] = False if isinstance(_val, bool) else ""
+                df.loc[mask, _col] = _val
         else:
             new_row = {
                 'frame': frame_idx, 't': frame_idx / fps,
@@ -10340,6 +11545,8 @@ class Controller:
                 'conf': 1.0, 'keyframe': True,
                 'raw_x_px': np.nan, 'raw_y_px': np.nan,
                 'tracking_source': "manual", 'manual_corrected': True,
+                'source': VideoProcessor.SOURCE_MANUAL,
+                'tracking_status': VideoProcessor.STATUS_HIGH,
                 'interpolated': False, 'smoothed': False,
                 'tracking_valid': True, 'tracking_invalid_reason': "",
             }
@@ -10399,7 +11606,12 @@ class Controller:
                          orient_box: Optional[bool] = None,
                          use_multi_anchor: Optional[bool] = None,
                          anchor_bank_max: Optional[int] = None,
-                         experimental_lookahead: Optional[bool] = None) -> Tuple[str, pd.DataFrame]:
+                         experimental_lookahead: Optional[bool] = None,
+                                                                                     
+                         damage_condition: Optional[str] = None,
+                         center_method: Optional[str] = None,
+                         max_predicted_run: Optional[int] = None,
+                         raw_tracking_only: Optional[bool] = None) -> Tuple[str, pd.DataFrame]:
         video_path = video_path or self.state.video_path
         if not video_path: return _MSG["no_video"], pd.DataFrame()
         self.state.history.push_state(self.state.objects)
@@ -10531,6 +11743,32 @@ class Controller:
                 self.video_processor.autofit_expand = float(np.clip(float(autofit_expand), 1.2, 4.0))
             except (TypeError, ValueError):
                 pass
+                                                                                     
+        if damage_condition is not None:
+            _dc = str(damage_condition).upper()
+            if _dc in VideoProcessor.DAMAGE_CONDITIONS:
+                self.video_processor.damage_condition = _dc
+        if center_method is not None:
+            _cm = str(center_method)
+            if _cm in ShuttlecockCenterEstimator.METHODS:
+                                                                                     
+                                                                                     
+                if _cm != self.video_processor.center_method:
+                    self.video_processor.reset_center_method()
+                self.video_processor.center_method = _cm
+        if max_predicted_run is not None:
+            try:
+                self.video_processor.max_predicted_run = int(max(0, int(max_predicted_run)))
+            except (TypeError, ValueError):
+                pass
+        if raw_tracking_only is not None:
+            self.video_processor.raw_tracking_only = bool(raw_tracking_only)
+        if self.video_processor.is_shuttlecock_mode():
+            logger.info(
+                f"셔틀콕 전용 추적: 손상 조건={self.video_processor.damage_condition}, "
+                f"중심 정의={self.video_processor.get_center_method()}, "
+                f"연속 예측 허용={self.video_processor.max_predicted_run}프레임, "
+                f"추적 중 스무딩={'끔(RAW)' if self.video_processor.raw_tracking_only else '켬'}")
         try:
             fps = self.video_processor.process_and_track(video_path, self.state.objects, tracker_type, use_yolo, int(cls_target), fwd_bwd, stabilize)
         except Exception as e:
@@ -10649,6 +11887,18 @@ class Controller:
                 drift=drift_total, reacquired=reacq_total, dropped=dropped_all)
         if drift_total > 0 and self.video_processor.drop_drift_rows:
             status += "\n" + _MSG["tracking_drift_warn"].format(drift=drift_total)
+                                                                                     
+                                                                                     
+        if self.video_processor.is_shuttlecock_mode():
+            pred_total = int(sum((stats.get("predicted_rows") or {}).values()))
+            status += "\n" + _MSG["shuttlecock_line"].format(
+                damage=str(stats.get("damage_condition", "-")),
+                center=str(stats.get("center_method", "-")),
+                predicted=pred_total,
+                smooth="끔(RAW)" if stats.get("raw_tracking_only", True) else "켬")
+            if recorded_all > 0 and pred_total > 0.1 * recorded_all:
+                status += "\n" + _MSG["shuttlecock_predicted_warn"].format(
+                    predicted=pred_total, ratio=pred_total / recorded_all * 100.0)
         pause_frame = getattr(self.video_processor, "last_pause_frame", None)
         if pause_frame is not None:
             status = get_strings()["check"]["paused_status"].format(
@@ -12238,14 +13488,42 @@ class Controller:
         y = pd.to_numeric(df['y_px'], errors='coerce')
         keyframe = df['keyframe'] == True if 'keyframe' in df.columns else pd.Series(False, index=df.index)
 
-        jump = pd.Series(0.0, index=df.index)
-        if len(df) > 2:
-            step = np.hypot(x.diff().to_numpy(), y.diff().to_numpy())
-            finite = step[np.isfinite(step)]
-            if len(finite) > 4:
-                median_step = float(np.median(finite))
-                mad = float(np.median(np.abs(finite - median_step))) or 1.0
-                jump = pd.Series(np.nan_to_num((step - median_step) / (mad * 1.4826 + 1e-9)), index=df.index)
+                                                                                     
+                                                                                    
+                                                                                     
+        def _robust_z(values: np.ndarray) -> pd.Series:
+            arr = np.asarray(values, dtype=float)
+            finite = arr[np.isfinite(arr)]
+            if len(finite) <= 4:
+                return pd.Series(0.0, index=df.index)
+            med = float(np.median(finite))
+            mad = float(np.median(np.abs(finite - med))) or 1.0
+            return pd.Series(np.nan_to_num((arr - med) / (mad * 1.4826 + 1e-9)), index=df.index)
+
+        step_arr = np.hypot(x.diff().to_numpy(), y.diff().to_numpy()) if len(df) > 2 \
+            else np.zeros(len(df))
+        jump = _robust_z(step_arr)
+                                                                                     
+                                                                                     
+        speed_arr = step_arr
+        accel_arr = np.concatenate(([np.nan], np.diff(speed_arr))) if len(speed_arr) > 1 \
+            else np.zeros(len(df))
+        vel_z = _robust_z(speed_arr)
+        acc_z = _robust_z(accel_arr)
+                                                                                     
+        if {'w', 'h'}.issubset(df.columns):
+            area = (pd.to_numeric(df['w'], errors='coerce')
+                    * pd.to_numeric(df['h'], errors='coerce')).to_numpy(dtype=float)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                area_ratio = np.concatenate(([1.0], area[1:] / np.where(area[:-1] > 1e-9,
+                                                                        area[:-1], np.nan)))
+        else:
+            area_ratio = np.ones(len(df))
+        area_ratio = pd.Series(area_ratio, index=df.index)
+        source_col = df['source'].astype(str) if 'source' in df.columns \
+            else pd.Series("", index=df.index)
+        status_col = df['tracking_status'].astype(str) if 'tracking_status' in df.columns \
+            else pd.Series("", index=df.index)
 
         rows = []
         for i in df.index:
@@ -12257,12 +13535,26 @@ class Controller:
                     reasons.append(CK["reason_low_conf"])
                 if float(jump.get(i, 0.0)) > 6.0:
                     reasons.append(CK["reason_jump"])
+                if abs(float(vel_z.get(i, 0.0))) > 6.0:
+                    reasons.append(CK["reason_velocity"])
+                if abs(float(acc_z.get(i, 0.0))) > 8.0:
+                    reasons.append(CK["reason_accel"])
+                _ar = float(area_ratio.get(i, 1.0))
+                if np.isfinite(_ar) and (_ar > 2.5 or _ar < 0.4):
+                    reasons.append(CK["reason_size"])
+                if str(source_col.get(i, "")) == VideoProcessor.SOURCE_PREDICTED:
+                    reasons.append(CK["reason_predicted"])
+                if str(status_col.get(i, "")) == VideoProcessor.STATUS_LOST:
+                    reasons.append(CK["reason_status"])
             if reasons:
                 rows.append({
                     CK["col_frame"]: int(frames.get(i, -1)),
                     CK["col_conf"]: float(conf.get(i, np.nan)),
                     CK["col_x"]: float(x.get(i, np.nan)),
                     CK["col_y"]: float(y.get(i, np.nan)),
+                                                                                     
+                    "source": str(source_col.get(i, "")) or "-",
+                    "status": str(status_col.get(i, "")) or "-",
                     CK["col_reason"]: " / ".join(reasons),
                 })
         return pd.DataFrame(rows)
@@ -12438,6 +13730,296 @@ class Controller:
         if table.empty:
             return CK["status_clean"].format(total=total)
         return CK["status_found"].format(n=len(table), total=total)
+
+    def build_research_trajectory(self, obj_id: str) -> pd.DataFrame:
+        """연구용 최종 궤적 표를 만든다.
+
+        요구되는 최소 열(frame, time, x, y, confidence, tracking_status, source, vx, vy,
+        speed)에 파생량 ax, ay 를 더한다. 속도·가속도는 추적 결과에서 수치 미분으로
+        얻은 파생량이므로, 어느 프레임이 관측이고 어느 프레임이 예측인지 함께 남긴다.
+        그래야 연구자가 예측 구간을 빼고 다시 계산하는 sensitivity analysis 를 할 수 있다.
+
+        여기서는 스무딩을 하지 않는다. 추적과 스무딩을 분리하기 위해서다.
+        """
+        obj = self.state.objects.get(obj_id)
+        if obj is None or obj.trajectory.empty or 'frame' not in obj.trajectory.columns:
+            return pd.DataFrame()
+        tr = obj.trajectory.sort_values('frame').reset_index(drop=True)
+        fps = float(self.state.fps or 30.0)
+        frame = pd.to_numeric(tr['frame'], errors='coerce').to_numpy(dtype=float)
+        x = pd.to_numeric(tr.get('x_px'), errors='coerce').to_numpy(dtype=float)
+        y = pd.to_numeric(tr.get('y_px'), errors='coerce').to_numpy(dtype=float)
+        conf = pd.to_numeric(tr.get('conf'), errors='coerce').to_numpy(dtype=float) \
+            if 'conf' in tr.columns else np.full(len(tr), np.nan)
+        t = frame / max(1e-9, fps) + float(self.state.time_offset or 0.0)
+
+        if 'source' in tr.columns:
+            source = tr['source'].astype(str).replace({'nan': ''}).to_numpy()
+        else:
+            source = np.full(len(tr), VideoProcessor.SOURCE_DETECTED, dtype=object)
+        if 'manual_corrected' in tr.columns:
+            manual = _as_bool(tr['manual_corrected']).to_numpy()
+            source = np.where(manual, VideoProcessor.SOURCE_MANUAL, source)
+        if 'keyframe' in tr.columns:
+            key = _as_bool(tr['keyframe']).to_numpy()
+            source = np.where(key & (source == ''), VideoProcessor.SOURCE_MANUAL, source)
+        source = np.where(source == '', VideoProcessor.SOURCE_DETECTED, source)
+
+        if 'tracking_status' in tr.columns:
+            status = tr['tracking_status'].astype(str).replace({'nan': ''}).to_numpy()
+        else:
+            status = np.full(len(tr), '', dtype=object)
+        status = np.array([st if st else VideoProcessor.status_from_confidence(c, sc)
+                           for st, c, sc in zip(status, conf, source)], dtype=object)
+        status = np.where(np.isfinite(x) & np.isfinite(y), status, VideoProcessor.STATUS_LOST)
+
+                                                                                     
+                                                                                     
+        dt = np.gradient(t) if len(t) > 1 else np.array([1.0 / fps])
+        with np.errstate(invalid='ignore', divide='ignore'):
+            vx = np.gradient(x) / dt if len(x) > 1 else np.full(len(x), np.nan)
+            vy = np.gradient(y) / dt if len(y) > 1 else np.full(len(y), np.nan)
+            ax = np.gradient(vx) / dt if len(vx) > 1 else np.full(len(x), np.nan)
+            ay = np.gradient(vy) / dt if len(vy) > 1 else np.full(len(y), np.nan)
+        speed = np.hypot(vx, vy)
+
+        out = pd.DataFrame({
+            'frame': pd.array(frame, dtype='Int64'),
+            'time': t,
+            'x': x, 'y': y,
+            'confidence': conf,
+            'tracking_status': status,
+            'source': source,
+            'vx': vx, 'vy': vy, 'speed': speed,
+            'ax': ax, 'ay': ay,
+        })
+                                                                                     
+                                                                                     
+        neighbour_pred = np.zeros(len(out), dtype=bool)
+        pred = (source == VideoProcessor.SOURCE_PREDICTED) | ~np.isfinite(x)
+        for shift in (-1, 0, 1):
+            neighbour_pred |= np.roll(pred, shift)
+        if len(neighbour_pred):
+            neighbour_pred[0] = True
+            neighbour_pred[-1] = True
+        out['derivative_reliable'] = ~neighbour_pred
+        for col in ('center_method', 'center_confidence', 'tracking_warning', 'tracking_score'):
+            if col in tr.columns:
+                out[col] = tr[col].to_numpy()
+        return out
+
+    def export_research_trajectory(self, obj_id: str) -> Tuple[str, Optional[List[str]]]:
+        """연구용 궤적 CSV 를 파일로 저장한다(물리 분석 파이프라인의 입력)."""
+        df = self.build_research_trajectory(obj_id)
+        if df.empty:
+            return _MSG["no_data_to_export"], None
+        tmpdir = tempfile.mkdtemp()
+        meta = self.experiment_meta
+        name_part = str(meta.get("experiment_name") or obj_id).strip() or obj_id
+        trial_part = str(meta.get("trial_number") or "").strip()
+        base = f"{name_part}_{trial_part}_trajectory" if trial_part else f"{name_part}_trajectory"
+        path = os.path.join(tmpdir, base + ".csv")
+        df.to_csv(path, index=False)
+        return path, [path]
+
+                                                                                     
+                                                                                     
+
+    def load_reference_trajectory(self, file_path: Optional[str]) -> str:
+        """검증에 쓸 기준 궤적을 읽는다.
+
+        기준은 사람의 수동 annotation, 다른 추적기 결과, 합성 영상의 정답 궤적 중
+        무엇이든 될 수 있다. 열 이름은 frame / x_px / y_px 같은 흔한 이름을 자동으로
+        찾는다.
+        """
+        VS = get_strings()["validate"]
+        if not file_path:
+            return VS["ref_none"]
+        try:
+            raw = pd.read_csv(file_path)
+        except Exception:
+            try:
+                raw = pd.read_csv(file_path, sep=None, engine="python")
+            except Exception as exc:
+                return VS["ref_failed"].format(error=str(exc))
+        try:
+            ref = ShuttlecockTrajectoryValidator.normalize_reference(raw)
+        except Exception as exc:
+            return VS["ref_failed"].format(error=str(exc))
+        self.reference_trajectory = ref
+        self.reference_label = os.path.basename(str(file_path))
+        self.tracking_validation = None
+        return VS["ref_loaded"].format(name=self.reference_label, n=len(ref),
+                                       first=int(ref['frame'].iloc[0]),
+                                       last=int(ref['frame'].iloc[-1]))
+
+    def clear_reference_trajectory(self) -> str:
+        self.reference_trajectory = None
+        self.reference_label = ""
+        self.tracking_validation = None
+        return get_strings()["validate"]["ref_cleared"]
+
+    def run_tracking_validation(self, obj_id: str) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
+        """AI 궤적과 기준 궤적을 비교하고, 그 결과로 사용 가능 여부를 판정한다."""
+        VS = get_strings()["validate"]
+        obj = self.state.objects.get(obj_id)
+        if obj is None or obj.trajectory.empty:
+            return pd.DataFrame(), pd.DataFrame(), VS["no_track"]
+        if self.reference_trajectory is None or self.reference_trajectory.empty:
+            return pd.DataFrame(), pd.DataFrame(), VS["no_reference"]
+        try:
+            res = ShuttlecockTrajectoryValidator.run(
+                obj.trajectory, self.reference_trajectory,
+                float(self.state.fps or 30.0),
+                float(obj.scale_m_px if obj.calibrated else 1.0),
+                float(obj.mass or ShuttlecockTrajectoryValidator.DEFAULT_MASS_KG),
+                float(self.shuttlecock_diameter_m))
+        except Exception as exc:
+            return pd.DataFrame(), pd.DataFrame(), VS["failed"].format(error=str(exc))
+        if not res['position']:
+            return pd.DataFrame(), pd.DataFrame(), VS["no_overlap"]
+        self.tracking_validation = res
+        return (self.build_validation_metrics_table(res), res['physics_table'],
+                self.build_validation_verdict(res))
+
+    @staticmethod
+    def build_validation_metrics_table(res: Dict[str, Any]) -> pd.DataFrame:
+        VS = get_strings()["validate"]
+        pos, vel, trk = res.get('position', {}), res.get('velocity', {}), res.get('tracking', {})
+        rows = [
+            (VS["m_compared"], pos.get('compared_frames'), "frames"),
+            (VS["m_mae"], pos.get('mae_px'), "px"),
+            (VS["m_rmse"], pos.get('rmse_px'), "px"),
+            (VS["m_median"], pos.get('median_px'), "px"),
+            (VS["m_p95"], pos.get('p95_px'), "px"),
+            (VS["m_max"], pos.get('max_px'), "px"),
+            (VS["m_success"], trk.get('success_rate_pct'), "%"),
+            (VS["m_coverage"], trk.get('coverage_pct'), "%"),
+            (VS["m_lost"], trk.get('lost_ratio_pct'), "%"),
+            (VS["m_predicted"], trk.get('predicted_frames'), "frames"),
+            (VS["m_breaks"], trk.get('track_breaks'), "count"),
+            (VS["m_recovery"], trk.get('recovery_success_pct'), "%"),
+            (VS["m_vmae"], vel.get('v_mae'), "px/s or m/s"),
+            (VS["m_vrmse"], vel.get('v_rmse'), "px/s or m/s"),
+            (VS["m_vrel"], vel.get('v_mae_rel_pct'), "%"),
+        ]
+        return pd.DataFrame([{VS["col_metric"]: k,
+                              VS["col_value"]: (float(v) if isinstance(v, (int, float, np.floating))
+                                                and v is not None else np.nan),
+                              VS["col_unit"]: u}
+                             for k, v, u in rows if v is not None])
+
+                                                                                     
+                                                                                     
+                                                                                     
+    VERDICT_MAX_RMSE_RATIO = 0.25
+    VERDICT_MIN_SUCCESS_PCT = 95.0
+    VERDICT_MAX_LOST_PCT = 5.0
+    VERDICT_MAX_VEL_REL_PCT = 10.0
+    VERDICT_MAX_PHYS_REL_PCT = 5.0
+
+    def build_validation_verdict(self, res: Dict[str, Any]) -> str:
+        """검증 수치만으로 '연구 데이터로 써도 되는가'를 판정한다.
+
+        의견이 아니라 기준과 측정값의 비교로 답한다. 기준을 하나라도 넘기지 못하면
+        조건부 또는 부적합으로 내리고, 어느 항목이 왜 걸렸는지 그대로 보여준다.
+        """
+        VS = get_strings()["validate"]
+        pos, vel, trk = res.get('position', {}), res.get('velocity', {}), res.get('tracking', {})
+        phys = res.get('physics_table')
+        checks: List[Tuple[str, bool, str]] = []
+
+                                                                                     
+                                                                                     
+        aligned = res.get('aligned')
+        size_ref = float('nan')
+        obj = self.state.objects.get(self.state.active_obj_id)
+        if obj is not None and 'w' in obj.trajectory.columns:
+            w = pd.to_numeric(obj.trajectory['w'], errors='coerce')
+            h = pd.to_numeric(obj.trajectory['h'], errors='coerce')
+            if w.notna().any():
+                size_ref = float(np.hypot(w.median(), h.median()))
+        rmse = float(pos.get('rmse_px', np.nan))
+        if np.isfinite(size_ref) and size_ref > 1e-6 and np.isfinite(rmse):
+            ratio = rmse / size_ref
+            checks.append((VS["c_position"].format(rmse=rmse, size=size_ref, ratio=ratio,
+                                                   limit=self.VERDICT_MAX_RMSE_RATIO),
+                           ratio <= self.VERDICT_MAX_RMSE_RATIO, "position"))
+        elif np.isfinite(rmse):
+            checks.append((VS["c_position_px"].format(rmse=rmse), True, "position"))
+
+        succ = float(trk.get('success_rate_pct', np.nan))
+        if np.isfinite(succ):
+            checks.append((VS["c_success"].format(value=succ, limit=self.VERDICT_MIN_SUCCESS_PCT),
+                           succ >= self.VERDICT_MIN_SUCCESS_PCT, "success"))
+        lost = float(trk.get('lost_ratio_pct', np.nan))
+        if np.isfinite(lost):
+            checks.append((VS["c_lost"].format(value=lost, limit=self.VERDICT_MAX_LOST_PCT),
+                           lost <= self.VERDICT_MAX_LOST_PCT, "lost"))
+        vrel = float(vel.get('v_mae_rel_pct', np.nan))
+        if np.isfinite(vrel):
+            checks.append((VS["c_velocity"].format(value=vrel, limit=self.VERDICT_MAX_VEL_REL_PCT),
+                           vrel <= self.VERDICT_MAX_VEL_REL_PCT, "velocity"))
+
+        worst_name, worst_val = "", float('nan')
+        if phys is not None and not phys.empty and '상대오차(%)' in phys.columns:
+            rel = pd.to_numeric(phys['상대오차(%)'], errors='coerce')
+            if rel.notna().any():
+                worst_i = int(rel.idxmax())
+                worst_name = str(phys.loc[worst_i, '물리량'])
+                worst_val = float(rel.max())
+                checks.append((VS["c_physics"].format(name=worst_name, value=worst_val,
+                                                      limit=self.VERDICT_MAX_PHYS_REL_PCT),
+                               worst_val <= self.VERDICT_MAX_PHYS_REL_PCT, "physics"))
+
+        if not checks:
+            return VS["verdict_insufficient"]
+        failed = [c for c in checks if not c[1]]
+        hard_fail = any(c[2] in ("position", "success", "physics") for c in failed)
+        if not failed:
+            head = VS["verdict_yes"]
+        elif hard_fail:
+            head = VS["verdict_no"]
+        else:
+            head = VS["verdict_conditional"]
+        lines = [head, "", VS["verdict_basis"]]
+        for text, ok, _kind in checks:
+            lines.append(f"- {'✅' if ok else '❌'} {text}")
+        pred = int(trk.get('predicted_frames', 0) or 0)
+        if pred:
+            lines.append("")
+            lines.append(VS["verdict_predicted_note"].format(n=pred))
+        lines.append("")
+        lines.append(VS["verdict_reference_note"].format(name=self.reference_label or "-"))
+        return "\n".join(lines)
+
+    def local_retrack(self, obj_id: str, frame_idx: int, window: int = 15,
+                      tracker_type: str = "CSRT", stabilize: bool = False
+                      ) -> Tuple[pd.DataFrame, pd.DataFrame, str, str]:
+        """사람이 고친 위치를 기준으로 앞뒤 몇 프레임만 다시 추적한다.
+
+        전체를 다시 돌리지 않고 수정 지점 주변만 손보므로, 이미 확인이 끝난 구간의
+        결과가 사람 모르게 바뀌지 않는다. 재추적 구간은 frame_idx 부터 frame_idx+window
+        까지이며, 그 밖의 프레임은 그대로 둔다.
+        """
+        CK = get_strings()["check"]
+        obj = self.state.objects.get(obj_id)
+        if obj is None or obj.trajectory.empty:
+            return pd.DataFrame(), pd.DataFrame(), "", CK["status_no_track"]
+        start = int(frame_idx)
+        span = max(1, int(window))
+        prev_end = self.video_processor.frame_end
+        prev_start = self.video_processor.frame_start
+        try:
+            self.video_processor.frame_end = start + span
+            traj, phys, summary, status = self.retrack_from_frame(
+                obj_id, start, tracker_type, False, 0, stabilize)
+        finally:
+            self.video_processor.frame_end = prev_end
+            self.video_processor.frame_start = prev_start
+        return traj, phys, summary, CK["local_retrack_done"].format(
+            start=start, end=start + span) if status.startswith(
+                CK["retrack_done"].split("{")[0]) else status
 
     def run_physics_validation(self, obj_id: str, thresholds: Optional[Dict[str, float]] = None,
                                levels: Optional[Dict[str, float]] = None,
@@ -15012,6 +16594,8 @@ class Controller:
                                      'x_skirt', 'y_skirt', 'skirt_conf', 'cork_skirt_dist',
                                      'conf', 'tracking_score', 'tracking_warning',
                                      'tracking_valid', 'tracking_invalid_reason', 'tracking_source',
+                                                                                     
+                                     'source', 'tracking_status', 'center_method', 'center_confidence',
                                      'manual_corrected', 'interpolated', 'smoothed', 'keyframe')
                          if c in traj.columns]
             if prov_cols:
@@ -15056,6 +16640,16 @@ class Controller:
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(summary, f, ensure_ascii=False, indent=2)
         files["experiment_info"] = meta_path
+                                                                                     
+                                                                                     
+        try:
+            research = self.build_research_trajectory(obj_id)
+            if not research.empty:
+                research_path = os.path.join(tmpdir, f"{base_name}_추적궤적.csv")
+                research.to_csv(research_path, index=False)
+                files["research_trajectory"] = research_path
+        except Exception as exc:
+            logger.warning(f"연구용 궤적 CSV 저장 중 오류: {exc}")
         return json.dumps(files, indent=2, ensure_ascii=False)
 
     def save_project(self) -> str:
@@ -15464,6 +17058,13 @@ class Controller:
         if 'tracking_source' not in indexed.columns:
             indexed['tracking_source'] = ""
         indexed.loc[_filled, 'tracking_source'] = "interpolated"
+                                                                                     
+                                                                                     
+        for _c, _v in (('source', VideoProcessor.SOURCE_INTERPOLATED),
+                       ('tracking_status', VideoProcessor.STATUS_LOW)):
+            if _c not in indexed.columns:
+                indexed[_c] = ""
+            indexed.loc[_filled, _c] = _v
 
         indexed['w'] = indexed['w'].interpolate()
         indexed['h'] = indexed['h'].interpolate()
@@ -15518,8 +17119,13 @@ class Controller:
             df.loc[mask, 'y_px'] = y_px
             df.loc[mask, 'keyframe'] = True
             df.loc[mask, 'conf'] = 1.0
+                                                                                     
+                                                                                     
             for _col, _val in (('manual_corrected', True), ('tracking_source', "manual"),
+                               ('source', VideoProcessor.SOURCE_MANUAL),
+                               ('tracking_status', VideoProcessor.STATUS_HIGH),
                                ('tracking_valid', True), ('tracking_invalid_reason', ""),
+                               ('tracking_warning', ""),
                                ('smoothed', False), ('interpolated', False)):
                 if _col not in df.columns:
                     df[_col] = False if isinstance(_val, bool) else ""
@@ -15531,6 +17137,10 @@ class Controller:
                 'w': float(df['w'].mean()) if not df.empty else 30.0,
                 'h': float(df['h'].mean()) if not df.empty else 30.0,
                 'conf': 1.0, 'keyframe': True,
+                                                                              
+                'source': VideoProcessor.SOURCE_MANUAL,
+                'tracking_status': VideoProcessor.STATUS_HIGH,
+                'manual_corrected': True, 'tracking_source': "manual",
             }
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
@@ -15935,6 +17545,8 @@ def build_gui():
         SC = S["summary_cards"]
         CS = S["coordinate"]
         CK = S["check"]
+        VS = S["validate"]
+        SH = S["shuttlecock"]
         RST = S["reset"]
         RS = S["research"]
         TM = S["tabs_main"]
@@ -16213,6 +17825,23 @@ def build_gui():
                                 tracking_mode = gr.Radio(["Conservative", "Balanced", "Aggressive"],
                                                          value="Balanced", label=WT["mode_label"])
                                 gr.Markdown(WT["mode_desc"], elem_id="aps_hint")
+                                                                                     
+                            with gr.Accordion(SH["group"], open=True):
+                                gr.Markdown(SH["group_desc"], elem_id="aps_hint")
+                                damage_condition = gr.Dropdown(
+                                    list(VideoProcessor.DAMAGE_CONDITIONS.keys()),
+                                    value="NORMAL", label=SH["damage_label"])
+                                gr.Markdown(SH["damage_desc"], elem_id="aps_hint")
+                                center_method = gr.Dropdown(
+                                    list(ShuttlecockCenterEstimator.METHODS),
+                                    value="auto", label=SH["center_label"])
+                                gr.Markdown(SH["center_desc"], elem_id="aps_hint")
+                                with gr.Row():
+                                    max_predicted_run = gr.Slider(0, 20, value=5, step=1,
+                                                                  label=SH["predicted_run_label"])
+                                    raw_tracking_only = gr.Checkbox(value=True, label=SH["raw_label"])
+                                gr.Markdown(SH["predicted_run_desc"], elem_id="aps_hint")
+                                gr.Markdown(SH["raw_desc"], elem_id="aps_hint")
                                 gr.Markdown(WT["weight_desc"], elem_id="aps_hint")
                                 with gr.Row():
                                     w_distance = gr.Slider(0.0, 3.0, value=1.0, step=0.1, label=WT["w_distance"])
@@ -16314,11 +17943,33 @@ def build_gui():
                                     gr.Markdown(CK["nav_desc"], elem_id="aps_hint")
                                     btn_retrack = gr.Button(CK["retrack_button"], variant="primary", size="sm")
                                     gr.Markdown(CK["retrack_desc"], elem_id="aps_hint")
+                                                                                     
+                                    with gr.Row():
+                                        btn_local_retrack = gr.Button(CK["local_retrack_button"], size="sm")
+                                        local_retrack_window = gr.Slider(3, 60, value=15, step=1,
+                                                                         label=CK["local_retrack_window"])
+                                    gr.Markdown(CK["local_retrack_desc"], elem_id="aps_hint")
                                     with gr.Row():
                                         btn_delete_point = gr.Button(CK["delete_button"], size="sm")
                                         btn_delete_bulk = gr.Button(CK["bulk_delete_button"], size="sm")
                                     gr.Markdown(CK["delete_desc"] + " " + CK["bulk_delete_desc"], elem_id="aps_hint")
                                     check_table = gr.Dataframe(label=CK["table"], max_height=220)
+                                                                                     
+                                                                                     
+                                with gr.Accordion(VS["header"], open=False):
+                                    gr.Markdown(VS["ref_desc"], elem_id="aps_hint")
+                                    ref_file = gr.File(label=VS["ref_upload"], file_types=[".csv", ".txt"])
+                                    ref_status = gr.Markdown("", elem_id="aps_hint")
+                                    with gr.Row():
+                                        btn_validate_track = gr.Button(VS["run_button"], variant="primary", size="sm")
+                                        btn_clear_ref = gr.Button(VS["clear_button"], size="sm")
+                                    gr.Markdown(VS["run_desc"], elem_id="aps_hint")
+                                    track_metrics_table = gr.Dataframe(label=VS["metrics_table"], max_height=260)
+                                    track_physics_table = gr.Dataframe(label=VS["physics_table"], max_height=260)
+                                    track_verdict = gr.Markdown("", elem_id="aps_hint")
+                                    btn_export_research = gr.Button(VS["export_button"], size="sm")
+                                    research_file = gr.File(label=VS["export_button"], interactive=False)
+                                    gr.Markdown(VS["export_desc"], elem_id="aps_hint")
                                 repair_method = gr.Dropdown(WT["repair_choices"], value="Spline", label=WT["repair_algo_label"])
                                 btn_repair = gr.Button(WT["repair_button"], size="sm")
                                 gr.Markdown(ST["desc_repair"], elem_id="aps_hint")
@@ -16834,7 +18485,8 @@ def build_gui():
                      f_start, f_end, wch, worb, wedge, wbright, orb_on, tpl_rate, smooth_s, seg_on,
                      a_gate, reacq_after, reacq_score, drop_drift, flow_bg, strict_j,
                      preset, proc_res, subpix, autofit_on, autofit_exp, center_on, csrt_f, anchor_lk,
-                     point_trk, orient_bx, multi_anc, anc_max, exp_la=False):
+                     point_trk, orient_bx, multi_anc, anc_max, exp_la=False,
+                     damage_cond="NORMAL", center_m="auto", max_pred=5, raw_only=True):
             ctrl.state.active_obj_id = obj_id
                                                                 
             ctrl.playback_cancel = True
@@ -16859,7 +18511,12 @@ def build_gui():
                                                anchor_lock=anchor_lk, use_point_tracking=point_trk,
                                                orient_box=orient_bx, use_multi_anchor=multi_anc,
                                                anchor_bank_max=anc_max,
-                                               experimental_lookahead=exp_la)
+                                               experimental_lookahead=exp_la,
+                                                                                     
+                                               damage_condition=damage_cond,
+                                               center_method=center_m,
+                                               max_predicted_run=max_pred,
+                                               raw_tracking_only=raw_only)
             pause_frame = getattr(ctrl.video_processor, "last_pause_frame", None)
             start_at = int(pause_frame) if pause_frame is not None else 0
             traj_df, phys_df, ai_sum, img, fig3d, fig_m, fig_p, cur = ctrl.get_object_snapshot(obj_id, start_at)
@@ -17498,6 +19155,33 @@ def build_gui():
                     img, fig3d, fig_m, fig_p, table, status,
                     gr.Slider(minimum=0, maximum=max(total, 1), step=1, value=target), target)
 
+        def on_local_retrack(obj_id, frame_idx, window, threshold, tracker, stab):
+            """수정한 프레임 주변만 다시 추적한다(국소 재추적)."""
+            traj_df, phys_df, ai_sum, status = ctrl.local_retrack(
+                obj_id, int(frame_idx), int(window), tracker, stab)
+            total = ctrl.get_total_frames(obj_id)
+            target = min(int(frame_idx), max(total, 1))
+            img, fig3d, fig_m, fig_p = ctrl.sync_to_frame(obj_id, target)
+            table = ctrl.get_suspicious_frames(obj_id, threshold)
+            return (_ui_table(traj_df), _ui_table(phys_df), ai_sum,
+                    img, fig3d, fig_m, fig_p, table, status,
+                    gr.Slider(minimum=0, maximum=max(total, 1), step=1, value=target), target)
+
+        def on_load_reference(file_obj):
+            path = getattr(file_obj, "name", None) or (file_obj if isinstance(file_obj, str) else None)
+            return ctrl.load_reference_trajectory(path)
+
+        def on_clear_reference():
+            return ctrl.clear_reference_trajectory(), None
+
+        def on_validate_tracking(obj_id):
+            metrics, physics, verdict = ctrl.run_tracking_validation(obj_id)
+            return _ui_table(metrics), _ui_table(physics), verdict
+
+        def on_export_research(obj_id):
+            status, paths = ctrl.export_research_trajectory(obj_id)
+            return (paths if paths else None)
+
         def on_delete_bulk(obj_id, threshold, frame_idx):
             traj_df, phys_df, ai_sum, status = ctrl.delete_suspicious_points(obj_id, threshold)
             img, fig3d, fig_m, fig_p = ctrl.sync_to_frame(obj_id, int(frame_idx))
@@ -17823,6 +19507,18 @@ def build_gui():
                      check_table, check_status, frame_slider, frame_number])
         retrack_event.then(on_sync_axis_plot, inputs=[obj_sel, frame_slider], outputs=[plot_axis]).then(
             on_state_refresh, inputs=[obj_sel], outputs=_refresh_outputs)
+        local_retrack_event = btn_local_retrack.click(
+            on_local_retrack,
+            inputs=[obj_sel, frame_slider, local_retrack_window, check_conf, trk_type, stabilize],
+            outputs=[df_traj, df_phys, ai_summary_box, frame_image, plot_3d, plot_multi, plot_phase,
+                     check_table, check_status, frame_slider, frame_number])
+        local_retrack_event.then(on_sync_axis_plot, inputs=[obj_sel, frame_slider], outputs=[plot_axis]).then(
+            on_state_refresh, inputs=[obj_sel], outputs=_refresh_outputs)
+        ref_file.change(on_load_reference, inputs=[ref_file], outputs=[ref_status])
+        btn_clear_ref.click(on_clear_reference, outputs=[ref_status, ref_file])
+        btn_validate_track.click(on_validate_tracking, inputs=[obj_sel],
+                                 outputs=[track_metrics_table, track_physics_table, track_verdict])
+        btn_export_research.click(on_export_research, inputs=[obj_sel], outputs=[research_file])
         bulk_event = btn_delete_bulk.click(
             on_delete_bulk, inputs=[obj_sel, check_conf, frame_slider],
             outputs=[df_traj, df_phys, ai_summary_box, frame_image, plot_3d, plot_multi, plot_phase,
@@ -17922,7 +19618,8 @@ def build_gui():
                     anchor_gate, reacquire_after, reacquire_min_score, drop_drift_rows, reject_flow_bg,
                     strict_jump, speed_preset, process_res, subpixel_refine,
                     autofit_bbox, autofit_expand, center_lock, csrt_fast, anchor_lock,
-                    use_point_tracking, orient_box, use_multi_anchor, anchor_bank_max, exp_lookahead],
+                    use_point_tracking, orient_box, use_multi_anchor, anchor_bank_max, exp_lookahead,
+                    damage_condition, center_method, max_predicted_run, raw_tracking_only],
             outputs=[lbl_status, df_traj, df_phys, ai_summary_box, frame_slider, frame_image, plot_3d, plot_multi, plot_phase, frame_number,
                      btn_phys, btn_export_all, btn_export_video],
         )

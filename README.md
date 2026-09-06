@@ -86,6 +86,60 @@ print(S.ValidationEngine().run_all())
 print(S.physics_verification_suite(S.ParameterDatabase()))
 ```
 
+## Getting the trajectories in the first place
+
+The simulator predicts flights. `AIPhysicsTracker.py` is the other half: it turns
+a video of a real shuttlecock flight into a per-frame trajectory that can be fed
+into the physics analysis, together with the evidence needed to decide whether
+that trajectory is good enough to use.
+
+```bash
+pip install gradio numpy pandas plotly scipy opencv-python
+python AIPhysicsTracker.py     # set Profile = Shuttlecock in step 5
+```
+
+What makes it shuttlecock-specific rather than a generic object tracker:
+
+- **One consistent centre definition.** A shuttlecock is a cork head plus a
+  feather skirt, so "the position of the shuttlecock" needs defining. Four
+  candidate definitions are computed (bbox centre, mask centroid, weighted
+  centroid, cork centre) and one is chosen and then **held fixed for the whole
+  run**, so damaged and undamaged shuttlecocks are measured the same way. The
+  cork centre moves 0.00 px across the four damage conditions; the mask centroid
+  moves up to 1.38 px.
+- **Damage conditions as a prior.** `NORMAL`, `2_FEATHERS_SYMMETRIC`,
+  `2_FEATHERS_ASYMMETRIC`, `4_FEATHERS_SYMMETRIC`, `4_FEATHERS_ASYMMETRIC` widen
+  the appearance and shape tolerances only, leaving the motion-continuity checks
+  untouched.
+- **Detection separated from tracking.** YOLO and the OpenCV trackers only
+  propose candidates; a candidate that does not fit the trajectory is rejected
+  however confident the detector was. Recovery after a failure must also be
+  physically reachable — a match farther away than the elapsed frames allow, or
+  on the wrong side of the direction of flight, is refused rather than recorded.
+- **Estimated values are never disguised as observations.** Every row carries
+  `source` (`DETECTED` / `RECOVERED` / `PREDICTED` / `INTERPOLATED` / `MANUAL`)
+  and `tracking_status` (`HIGH` / `MEDIUM` / `LOW` / `LOST`). Predicted rows can
+  never reach HIGH or MEDIUM, and gaps longer than a few frames are left empty
+  instead of being filled in.
+- **A validation mode that answers the question with numbers.** Give it a
+  reference trajectory and it reports position MAE/RMSE, success and lost-frame
+  rates, velocity error, and the relative error of v0, flight time, range, max
+  height, mean speed, speed decay, beta and C_D — then judges the run against
+  fixed thresholds and says which criterion failed.
+
+Measured performance on synthetic footage with an exact ground-truth trajectory
+(7 required conditions + 3 hard ones), and the reasoning behind each design
+choice:
+
+- [`docs/shuttlecock_tracking.md`](docs/shuttlecock_tracking.md) — pipeline,
+  confidence, recovery and validation methods
+- [`docs/shuttlecock_tracking_results.md`](docs/shuttlecock_tracking_results.md)
+  — measured errors, and the answer to "can this be used as research data?"
+
+```bash
+python3 tools/test_shuttlecock_tracking.py --verbose
+```
+
 ## Scope and limitations
 
 - The porosity (feather-damage) curve is an explicit interpolation between
@@ -98,6 +152,11 @@ print(S.physics_verification_suite(S.ParameterDatabase()))
 - 3D lateral/roll dynamics are model predictions, not validated against
   motion-tracked badminton footage — the UI labels them as such wherever they
   are shown.
+- The tracker's reported accuracy comes from synthetic footage with an exact
+  ground truth. Synthetic frames have a simple background and no turnover, lens
+  distortion, compression noise or changing light. Accuracy on real experimental
+  footage has to be established per camera setup by supplying a reference
+  trajectory and running the validation mode — which is what that mode is for.
 
 ## License
 
