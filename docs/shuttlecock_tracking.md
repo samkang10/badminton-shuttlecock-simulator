@@ -1,0 +1,286 @@
+# 셔틀콕 전용 추적 시스템 (AI Physics Tracker 2.55)
+
+이 문서는 `AIPhysicsTracker.py` 의 셔틀콕 추적 파이프라인이 **무엇을 어떻게 결정하는지**,
+그리고 **그 결과를 물리 연구 데이터로 써도 되는지 어떻게 판단하는지**를 설명한다.
+
+기존 프로그램은 범용 물체 추적기였다. 이번 변경은 그 구조를 유지한 채 셔틀콕에 필요한
+단계를 채워 넣은 것이며, `Profile = Shuttlecock` 을 고를 때만 셔틀콕 전용 동작이 켜진다.
+`Generic` / `Pendulum` 으로 쓰던 결과는 그대로 재현된다(아래 '회귀 확인' 참고).
+
+---
+
+## 1. 파이프라인
+
+```
+Video
+  ↓  ROI 우선 디코딩 · 분석 배율 축소 · 프레임 프리페치
+Frame
+  ↓
+Candidate generation      tracker(CSRT/KCF) · Kalman · 등속 · 등가속(물리예측)
+                          · optical flow · point set · template match · YOLO(선택)
+  ↓
+Shuttlecock-specific scoring   거리 · 방향 · 속도 · 크기 · 종횡비 · 외형(NCC)
+                               · 색 히스토그램 · ORB · edge · 밝기 · Kalman · 이력
+                               (가중치는 Profile 이 결정, 손상 조건이 허용 폭을 조정)
+  ↓
+Motion prediction         x_pred = x + v·dt + ½·a·dt²  (a 는 최근 4점에서 robust 추정)
+  ↓
+Final tracking            물리적으로 불가능한 후보는 detection confidence 가 높아도 기각
+  ↓
+Center estimation         bbox / mask centroid / weighted centroid / cork center
+                          (한 번 정해지면 실행 내내 고정)
+  ↓
+Confidence + status       HIGH / MEDIUM / LOW / LOST
+  ↓
+Outlier / failure detection   위치·속도·가속도·크기 급변, 예측 프레임, LOST 자동 표시
+  ↓
+Manual verification       클릭 수정 → source=MANUAL, confidence=1.0 → 국소 재추적
+  ↓
+Validated trajectory      기준 궤적과 비교 검증 (위치·속도·물리량)
+  ↓
+Physics analysis
+```
+
+검출과 추적은 분리되어 있다. YOLO 는 후보 생성기일 뿐이며, YOLO 가 높은 confidence 로
+내놓은 상자도 앵커 유사도 게이트와 운동 연속성 검사를 통과하지 못하면 배정되지 않는다.
+
+---
+
+## 2. 중심점 추정 — 무엇을 '셔틀콕의 위치'라고 부르는가
+
+연구에서 필요한 것은 눈에 가장 잘 띄는 부분이 아니라 **모든 프레임에서 같은 정의로 계산된
+대표 위치**다. `ShuttlecockCenterEstimator` 가 네 가지 후보를 계산한다.
+
+| 정의 | 계산 | 성격 |
+|---|---|---|
+| `bbox` | 추적 상자의 기하 중심 | 마스크가 없어도 항상 가능. 상자 자체가 흔들리면 같이 흔들린다 |
+| `mask_centroid` | 물체 마스크의 1차 모멘트 | 깃털이 비대칭으로 빠지면 남은 깃털 쪽으로 끌린다 |
+| `weighted_centroid` | 마스크 안에서 밝기 × 내부거리 가중 | 얇은 깃털 끝의 기여를 줄인다 |
+| `cork_center` | 마스크 안 가장 밝고 뭉친 덩어리(코르크) | 깃털 손상과 무관 |
+
+`auto` 는 첫 프레임에서 하나를 고르고 **그 실행 내내 바꾸지 않는다**. 조건마다 정의가
+달라지면 손상 조건 사이의 비교 자체가 성립하지 않기 때문이다. 물체 분리에 실패해 이 정의를
+적용하지 못한 프레임은 `center_method` 열에 `(fallback)` 으로 표시되고, 실행이 끝날 때
+"몇 프레임에 적용했고 몇 프레임은 상자 중심을 대신 썼다"가 로그로 남는다.
+
+**측정 결과** — 같은 자세·같은 위치에 손상 조건만 바꿔 그린 셔틀콕에서, 정상 셔틀콕 기준
+중심이 얼마나 이동하는가 (`tools/test_shuttlecock_tracking.py`):
+
+| 중심 정의 | 평균 이동 | 최대 |
+|---|---|---|
+| `cork_center` | **0.00 px** | 0.00 px |
+| `mask_centroid` | 0.88 px | 1.38 px |
+| `weighted_centroid` | 1.26 px | 1.50 px |
+
+그래서 `auto` 는 코르크를 찾을 수 있으면 `cork_center` 를 고른다.
+
+---
+
+## 3. 손상 조건 prior
+
+`NORMAL`, `2_FEATHERS_SYMMETRIC`, `2_FEATHERS_ASYMMETRIC`, `4_FEATHERS_SYMMETRIC`,
+`4_FEATHERS_ASYMMETRIC` 다섯 조건을 지정할 수 있다. 깃털이 빠지면 정상 셔틀콕과의 외형
+일치도가 **구조적으로** 낮아지므로, 조건이 심할수록 외형/크기/종횡비 허용 폭만 넓히고
+운동 연속성 기준은 그대로 둔다 (`VideoProcessor.DAMAGE_CONDITIONS`).
+
+| 조건 | 외형 문턱 | 크기 허용 | 종횡비 허용 | 앵커 게이트 |
+|---|---|---|---|---|
+| NORMAL | ×1.00 | ×1.00 | ×1.00 | ×1.00 |
+| 2 대칭 | ×0.92 | ×1.10 | ×1.10 | ×0.95 |
+| 2 비대칭 | ×0.86 | ×1.20 | ×1.25 | ×0.90 |
+| 4 대칭 | ×0.86 | ×1.20 | ×1.20 | ×0.90 |
+| 4 비대칭 | ×0.78 | ×1.35 | ×1.40 | ×0.85 |
+
+조건을 고르지 않으면 NORMAL 과 같아서 아무것도 완화하지 않는다.
+
+---
+
+## 4. Confidence 계산
+
+모델 confidence 를 그대로 쓰지 않는다. 프레임마다:
+
+```
+score       = Σ wᵢ·partᵢ / Σ wᵢ        (거리·방향·속도·크기·종횡비·외형·색·ORB·edge·Kalman·이력)
+              × source prior            (tracker 1.00, template 0.98, YOLO 0.92, flow 0.88, 예측 0.82)
+
+confidence  = 0.40·score
+            + 0.30·appearance_score     (NCC 0.5 + 색 0.3 + ORB 0.2)
+            + 0.15·motion_score         (방향·속도 연속성)
+            + 0.15·prediction_score     (Kalman·optical flow 일치)
+
+confidence ×= blur_factor               흐린 프레임일수록 최대 35% 감점
+confidence  = min(confidence, 0.45)     출처가 예측(kalman/motion/physics/flow)이면 상한
+```
+
+`tracking_status` 는 confidence 와 출처로 정한다.
+
+| status | 조건 |
+|---|---|
+| `HIGH` | confidence ≥ 0.75 (또는 사람이 직접 지정한 프레임) |
+| `MEDIUM` | 0.50 ≤ confidence < 0.75 |
+| `LOW` | 0 < confidence < 0.50, **또는 출처가 예측·보간이면 무조건 여기까지** |
+| `LOST` | 좌표 없음 |
+
+예측 프레임이 아무리 운동모델과 잘 맞아도 HIGH/MEDIUM 이 될 수 없다. 실제 관측이 아니기
+때문이다.
+
+### 작은 물체에서의 외형 판정
+
+원래는 `외형 = min(모양 NCC, 색 히스토그램 상관)` 이었다. 셔틀콕처럼 작고 색이 옅은
+물체에서는 이 `min` 이 문제가 된다.
+
+- 흰 셔틀콕 + 회색 코트에서는 HSV 히스토그램 1152개 빈 중 열 개 남짓에만 값이 몰린다.
+  이런 히스토그램은 물체와 배경을 **구분하지 못하므로**, 상관계수가 낮게 나와도 '다른
+  물체'라는 증거가 되지 못한다.
+- 그런 값에 거부권을 주면 멀쩡한 추적이 버려진다 (실측: 작게 보이는 조건에서 프레임의
+  14% 가 이 이유로 기록되지 않았다).
+
+그래서 셔틀콕 모드에서는 히스토그램의 **분별력**(값이 있는 빈 수)과 **표본 충분성**
+(빈당 화소 수)으로 신뢰도를 매기고, 신뢰도가 낮으면 색이 거부권을 갖지 못하게 한다. 색은
+점수 계산의 `color_hist` 항목으로 여전히 반영된다. 또한 상자를 0.65 / 0.8 / 1.0 / 1.25 배로
+바꿔가며 NCC 를 비교해, 카메라에서 멀어져 작아진 것을 '외형이 달라졌다'로 오해하지 않는다.
+
+---
+
+## 5. 실패 회복 (recovery)
+
+우선순위대로 시도한다.
+
+1. **국소 검출** — tracker / point set / optical flow 후보
+2. **시간적 전파** — Kalman, 등속·등가속 예측
+3. **단계적 ROI 재탐색** — 예측 위치 중심으로 반경을 2.5 → 5 → 9 배(대각선 기준)로 넓히며
+   앵커 패치를 찾는다. 어느 단계에서든 기준을 넘으면 거기서 멈춘다.
+4. **전체 프레임 재탐색** — 위 단계가 모두 실패했을 때만
+5. **사람의 수동 수정**
+
+어느 경로로 찾았든 앵커 유사도 게이트는 똑같이 적용되며, 추가로 **물리적 타당성**을 본다.
+
+- **이동 가능 거리** — 놓친 프레임 수 × 그동안 낼 수 있었던 속도보다 멀리 있으면 거부
+- **진행 방향** (셔틀콕 모드) — 한 번의 비행에서 수평 진행 방향은 뒤집히지 않는다.
+  마지막 속도와 반대쪽에서 찾았다면 거부
+
+이 검사는 실제로 오검출을 막는다. 긴 비행 테스트에서 화면 끝 부근의 배경을 셔틀콕으로
+오인한 재획득 3건이 "진행 방향과 반대쪽에서 발견"으로 기각됐고, 그 이전 버전에서는
+같은 상황에서 828 px 떨어진 배경이 궤적에 기록됐다.
+
+**예측 구간 길이 제한** — 검출 없이 예측만으로 잇는 것은 기본 5프레임까지다. 그 이상은
+좌표를 지어내지 않고 비워 둔다(`LOST`). 이 값은 UI 에서 조정할 수 있고 0 으로 두면 예측으로
+잇지 않는다.
+
+---
+
+## 6. 자동 이상치 탐지
+
+`get_suspicious_frames()` 가 프레임마다 다음을 검사해 목록으로 보여준다.
+
+- 좌표 없음
+- confidence 가 기준 미만
+- 위치 급변 (robust z-score > 6)
+- 속도 급변 (> 6), 가속도 급변 (> 8)
+- 상자 넓이가 직전 대비 2.5배 이상 / 0.4배 이하
+- `source = PREDICTED` 인 프레임
+- `tracking_status = LOST` 인 프레임
+
+목록에는 `source` 와 `status` 열이 함께 나오므로, 왜 의심스러운지 바로 보인다. 영상 위에는
+관측 프레임이 **채운 원(●)**, 예측·보간 프레임이 **빈 원(○)** 으로 그려지고 상자 아래에
+`C 0.87 | HIGH` 처럼 confidence 와 status 가 표시된다.
+
+---
+
+## 7. 수동 수정과 국소 재추적
+
+영상에서 올바른 위치를 클릭하면 그 프레임은 `source = MANUAL`, `confidence = 1.0`,
+`tracking_status = HIGH` 로 기록된다. 이어서 **"이 프레임 주변만 다시 추적"** 을 누르면
+그 지점부터 지정한 프레임 수(기본 15)만 다시 추적하고, 그 밖의 구간은 건드리지 않는다.
+이미 확인이 끝난 구간이 사람 모르게 바뀌지 않게 하기 위해서다.
+
+---
+
+## 8. 검증 (validation mode)
+
+`ShuttlecockTrajectoryValidator` 가 AI 궤적과 기준 궤적(사람의 수동 annotation, 다른 추적기
+결과, 또는 합성 영상의 정답 궤적)을 비교한다. UI: **6단계 → 추적 검증** 아코디언.
+
+**추적 오차**
+
+- 위치 오차 `eᵢ = √((x_ai−x_ref)² + (y_ai−y_ref)²)` 의 MAE / RMSE / 중앙값 / 95백분위 / 최대
+- 추적 성공률(실제 검출 기준), 좌표 기록 비율(예측 포함), 손실 프레임 비율,
+  추적 끊김 횟수, 회복 성공률
+- 속도 오차 MAE / RMSE / 기준 평균속력 대비 비율
+
+**물리량 오차** — 두 궤적에서 각각 계산해 상대오차를 낸다.
+
+| 물리량 | 계산 |
+|---|---|
+| v0 | 처음 몇 프레임 속력의 중앙값 |
+| flight time | (마지막 − 처음) / fps |
+| range | 수평 이동 폭 |
+| max height | 시작점 기준 최고 높이 |
+| mean speed | 전체 평균 속력 |
+| speed decay | `ln v` 를 `t` 로 회귀한 기울기의 음수 [1/s] |
+| beta | `1/v` 를 `t` 로 회귀한 기울기 = 1/ℓ [1/m] |
+| C_D | `ℓ = 2m/(ρ·S·C_D)` 를 뒤집어 계산 (눈금이 보정된 경우에만) |
+
+속도의 회귀는 위치 차분에서 나오므로 한두 프레임의 오차가 그대로 증폭된다. 그래서
+`speed decay` 와 `beta / C_D` 는 잔차가 큰 점을 빼고 다시 맞추는 robust 회귀로 구한다.
+이 처리는 AI 궤적과 기준 궤적에 **똑같이** 적용되므로 비교의 공정성은 유지되며, 궤적
+원본은 바뀌지 않는다. 예측 프레임이 섞여 있으면 그 프레임을 제외한 물리량 표가 함께
+계산되어, 예측 구간이 결과를 얼마나 움직이는지(sensitivity analysis) 볼 수 있다.
+
+**판정 기준** (`Controller.build_validation_verdict`)
+
+| 항목 | 기준 |
+|---|---|
+| 위치 RMSE | 셔틀콕 크기의 0.25배 이하 |
+| 추적 성공률 | 95% 이상 |
+| 손실 프레임 비율 | 5% 이하 |
+| 속도 오차 | 기준 평균속력의 10% 이하 |
+| 물리량 상대오차 (최대) | 5% 이하 |
+
+모두 통과하면 "사용 가능", 위치·성공률·물리량 중 하나라도 걸리면 "사용 불가",
+나머지만 걸리면 "조건부 사용 가능"으로 판정하고 **어느 항목이 왜 걸렸는지 그대로 보여준다.**
+
+---
+
+## 9. 최종 데이터 (연구 데이터 무결성)
+
+`Controller.build_research_trajectory()` 가 만드는 CSV:
+
+```
+frame, time, x, y, confidence, tracking_status, source, vx, vy, speed, ax, ay,
+derivative_reliable, center_method, center_confidence, tracking_warning, tracking_score
+```
+
+`source` 값:
+
+| 값 | 뜻 |
+|---|---|
+| `DETECTED` | 실제 영상에서 검출 |
+| `RECOVERED` | 추적 실패 후 재획득 (관측이지만 신뢰도는 낮게 시작) |
+| `PREDICTED` | 운동모델로 추정 — **관측이 아님** |
+| `INTERPOLATED` | 키프레임 사이 보간 — **관측이 아님** |
+| `MANUAL` | 사람이 직접 지정 |
+
+`derivative_reliable` 은 예측·결측 프레임에 인접해 vx/ax 를 믿기 어려운 지점을 False 로
+표시한다. 이 열들 덕분에 연구자는 예측 프레임을 제외하고 다시 계산해 결과가 달라지는지
+직접 확인할 수 있다.
+
+**추적 중에는 스무딩을 하지 않는다** (`raw_tracking_only`, 기본 켬). 스무딩은 물리적 운동
+자체를 바꿀 수 있으므로 `RAW TRACKING → VALIDATION → (선택) SMOOTHING → PHYSICS` 순서로
+분리한다. 스무딩이 필요하면 6단계의 '궤적 수정'을 쓴다.
+
+---
+
+## 10. 테스트
+
+`tools/make_synthetic_shuttlecock.py` 는 궤적을 수식으로 먼저 정하고 그 자리에 셔틀콕을
+그리므로, 오차 없는 기준 궤적이 존재한다. 코르크 헤드 + 깃털 스커트(깃대 16개 중 일부 제거로
+손상 조건 구현) + 항력이 있는 포물선 + 노출 시간 동안의 위치를 겹쳐 만드는 실제와 같은
+모션 블러를 그린다.
+
+```bash
+python3 tools/test_shuttlecock_tracking.py            # 요약
+python3 tools/test_shuttlecock_tracking.py --verbose  # 조건별 물리량까지
+```
+
+전체 결과는 [`docs/shuttlecock_tracking_results.md`](shuttlecock_tracking_results.md) 참고.
